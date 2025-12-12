@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run ruff format check
+        run: uv run ruff format --check .
+
+      - name: Run ruff linter
+        run: uv run ruff check .
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov=molx_agent --cov-report=xml tests/
+
+      - name: Run security checks
+        run: |
+          uv run bandit -ll --recursive molx_agent tests
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t molx_agent:test -f ./docker/Dockerfile .
+
+      - name: Test Docker image
+        run: docker run --rm molx_agent:test uv run molx-agent --version

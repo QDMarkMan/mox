@@ -1,0 +1,132 @@
+# uv pyproject.toml: https://docs.astral.sh/uv/
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "molx-agent"
+version = "0.1.0"
+description = "Drug design agent"
+readme = "README.md"
+authors = [{ name = "xtalpi.com", email = "tongfu.e@xtalpi.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.12"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+]
+keywords = []
+
+dependencies = ["typer>=0.4.0", "rich>=10.14.0"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4.3",
+  "pytest-html>=3.1.1",
+  "pytest-cov>=3.0.0",
+  "bandit>=1.7.1",
+  "ruff>=0.1.6",
+  "pre-commit>=2.21.0",
+  "safety>=2.3.5",
+  "mypy>=1.0.0",
+]
+
+[project.scripts]
+molx-agent = "molx_agent.__main__:app"
+
+[project.urls]
+Homepage = "https://github.com/xtalpi.com/molx-agent"
+
+[tool.uv]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.ruff]
+# https://beta.ruff.rs/docs/settings/
+# https://docs.astral.sh/ruff/configuration/
+line-length = 88
+
+# https://beta.ruff.rs/docs/rules/
+lint.select = ["E", "W", "F", "I"]
+lint.extend-select = ["I"]
+lint.ignore = ["F401"]
+
+# Exclude a variety of commonly ignored directories.
+respect-gitignore = true
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "venv",
+]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+# https://docs.pytest.org/en/6.2.x/customize.html#pyproject-toml
+# Directories that are not visited by pytest collector:
+norecursedirs = [
+  "hooks",
+  "*.egg",
+  ".eggs",
+  "dist",
+  "build",
+  "docs",
+  ".tox",
+  ".git",
+  "__pycache__",
+]
+doctest_optionflags = [
+  "NUMBER",
+  "NORMALIZE_WHITESPACE",
+  "IGNORE_EXCEPTION_DETAIL",
+]
+
+# Extra options:
+addopts = [
+  "--strict-markers",
+  "--tb=short",
+  "--doctest-modules",
+  "--doctest-continue-on-failure",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
