@@ -22,7 +22,15 @@ classifiers = [
 ]
 keywords = []
 
-dependencies = ["typer>=0.4.0", "rich>=10.14.0"]
+dependencies = [
+  "typer>=0.4.0",
+  "rich>=10.14.0",
+  "langgraph>=0.2.0",
+  "langchain-openai>=0.2.0",
+  "langchain-core>=0.3.0",
+  "pydantic-settings>=2.0.0",
+  "python-dotenv>=1.0.0",
+]
 
 [project.optional-dependencies]
 dev = [
