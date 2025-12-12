@@ -3,7 +3,6 @@ import urllib
 from time import sleep
 
 import langchain
-import molbloom
 import pandas as pd
 import pkg_resources
 import requests
@@ -284,7 +283,7 @@ class ControlChemCheck(BaseTool):
                 found = (
                     cw_df["cas"]
                     .astype(str)
-                    .str.contains(f"^\({query}\)$", regex=True)
+                    .str.contains(rf"^\({query}\)$", regex=True)
                     .any()
                 )
             if found:

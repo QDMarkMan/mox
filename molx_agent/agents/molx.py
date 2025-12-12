@@ -14,7 +14,7 @@ from langgraph.graph import END, StateGraph
 
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.data_cleaner import DataCleanerAgent
-from molx_agent.agents.modules.state import AgentState
+from molx_agent.agents.modules.state import AgentState, Message
 from molx_agent.agents.planner import PlannerAgent
 from molx_agent.agents.reporter import ReporterAgent
 from molx_agent.agents.tool_agent import ToolAgent
@@ -156,6 +156,101 @@ class MolxAgent(BaseAgent):
 
         return text_report, structured
 
+    def chat(self, message: str, history: list[Message] | None = None) -> tuple[str, list[Message]]:
+        """Run a chat turn with conversation history.
+
+        Args:
+            message: User message.
+            history: Optional previous conversation history.
+
+        Returns:
+            A tuple of (response, updated_history).
+        """
+        # Initialize history if not provided
+        if history is None:
+            history = []
+
+        # Add user message to history
+        history.append({"role": "user", "content": message})
+
+        # Build context from history for the planner
+        context = self._build_context(history)
+
+        # Run the agent with context
+        initial_state: AgentState = {
+            "user_query": context,
+            "messages": history,
+        }
+        final_state = self.run(initial_state)
+
+        # Get the response
+        response = final_state.get("final_answer", "I couldn't generate a response.")
+
+        # Add assistant response to history
+        history.append({"role": "assistant", "content": response})
+
+        return response, history
+
+    def _build_context(self, history: list[Message]) -> str:
+        """Build context string from conversation history.
+
+        Args:
+            history: Conversation history.
+
+        Returns:
+            Context string for the planner.
+        """
+        if len(history) <= 1:
+            # Only current message, no context needed
+            return history[-1]["content"] if history else ""
+
+        # Build context with recent history
+        context_parts = ["Previous conversation:"]
+        for msg in history[:-1]:  # All except current message
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            context_parts.append(f"- {role.upper()}: {content}")
+
+        context_parts.append(f"\nCurrent query: {history[-1]['content']}")
+        return "\n".join(context_parts)
+
+
+class ChatSession:
+    """Interactive chat session with conversation history."""
+
+    def __init__(self, agent: MolxAgent | None = None) -> None:
+        """Initialize chat session.
+
+        Args:
+            agent: Optional MolxAgent instance. Creates new one if not provided.
+        """
+        self.agent = agent or MolxAgent()
+        self.history: list[Message] = []
+
+    def send(self, message: str) -> str:
+        """Send a message and get response.
+
+        Args:
+            message: User message.
+
+        Returns:
+            Agent response.
+        """
+        response, self.history = self.agent.chat(message, self.history)
+        return response
+
+    def get_history(self) -> list[Message]:
+        """Get conversation history.
+
+        Returns:
+            List of messages.
+        """
+        return self.history.copy()
+
+    def clear(self) -> None:
+        """Clear conversation history."""
+        self.history = []
+
 
 # Convenience function for backward compatibility
 def run_sar_agent(user_query: str) -> tuple[str, dict]:
@@ -169,3 +264,4 @@ def run_sar_agent(user_query: str) -> tuple[str, dict]:
     """
     agent = MolxAgent()
     return agent.analyze(user_query)
+

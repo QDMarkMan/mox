@@ -2,12 +2,12 @@
 """CLI entry point for molx-agent."""
 
 import logging
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.prompt import Prompt
 
 from molx_agent import version
 
@@ -93,6 +93,80 @@ def sar(
 
 
 @app.command()
+def chat(
+    verbose: bool = typer.Option(
+        False, "-V", "--verbose", help="Enable verbose output"
+    ),
+) -> None:
+    """Start interactive chat session with the SAR agent.
+
+    Type your questions and get responses. Use 'exit', 'quit', or Ctrl+C to end.
+
+    Example:
+        molx-agent chat
+    """
+    if verbose:
+        logging.basicConfig(level=logging.INFO)
+
+    console.print(
+        Panel(
+            "[bold]Interactive SAR Analysis Chat[/]\n\n"
+            "Type your questions to analyze molecules.\n"
+            "Commands: [cyan]exit[/], [cyan]quit[/], [cyan]clear[/] (history)",
+            title="[cyan]MolxAgent Chat[/]",
+            border_style="cyan",
+        )
+    )
+
+    try:
+        from molx_agent.agents.molx import ChatSession
+
+        session = ChatSession()
+
+        while True:
+            try:
+                # Get user input
+                user_input = Prompt.ask("\n[bold cyan]You[/]")
+
+                # Handle commands
+                if user_input.lower() in ("exit", "quit", "q"):
+                    console.print("[yellow]Goodbye![/]")
+                    break
+                elif user_input.lower() == "clear":
+                    session.clear()
+                    console.print("[green]Conversation history cleared.[/]")
+                    continue
+                elif user_input.lower() == "history":
+                    history = session.get_history()
+                    if history:
+                        for msg in history:
+                            role = msg.get("role", "user")
+                            content = msg.get("content", "")[:100]
+                            console.print(f"  [{role}]: {content}...")
+                    else:
+                        console.print("[dim]No history yet.[/]")
+                    continue
+                elif not user_input.strip():
+                    continue
+
+                # Get response from agent
+                with console.status("[bold green]Thinking..."):
+                    response = session.send(user_input)
+
+                # Display response
+                console.print()
+                console.print(Panel(Markdown(response), title="[bold green]Agent[/]"))
+
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Interrupted. Goodbye![/]")
+                break
+
+    except Exception as e:
+        console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
 def hello(
     name: str = typer.Argument(..., help="Name to greet"),
 ) -> None:
@@ -104,3 +178,4 @@ def hello(
 
 if __name__ == "__main__":
     app()
+

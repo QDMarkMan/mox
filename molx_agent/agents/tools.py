@@ -22,32 +22,31 @@ def get_all_tools() -> list[BaseTool]:
     """
     tools: list[BaseTool] = []
 
-    # Load RDKit tools (always available)
+    # Load RDKit tools
     try:
         from molx_agent.tools.rdkit import FuncGroups, MolSimilarity, SMILES2Weight
-        from molx_agent.tools.safety import (
-            ControlChemCheck,
-            SimilarControlChemCheck,
-            SafetySummary,
-            ExplosiveCheck,
-        )
-        from molx_agent.tools.converters import Query2CAS, Query2SMILES, SMILES2Name
 
         tools.extend([
             MolSimilarity(),
             SMILES2Weight(),
             FuncGroups(),
-            ControlChemCheck(),
-            SimilarControlChemCheck(),
-            SafetySummary(),
-            ExplosiveCheck(),
-            Query2CAS(),
-            Query2SMILES(),
-            SMILES2Name()
         ])
-        logger.info("Loaded RDKit tools")
+        logger.info("Loaded RDKit tools (3)")
     except ImportError as e:
         logger.warning(f"Could not import RDKit tools: {e}")
+
+    # Load converter tools
+    try:
+        from molx_agent.tools.converters import Query2CAS, Query2SMILES, SMILES2Name
+
+        tools.extend([
+            Query2SMILES(),
+            Query2CAS(),
+            SMILES2Name(),
+        ])
+        logger.info("Loaded converter tools (3)")
+    except ImportError as e:
+        logger.warning(f"Could not import converter tools: {e}")
 
     logger.info(f"Total tools loaded: {len(tools)}")
     return tools

@@ -27,7 +27,7 @@ class ToolAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
             name="tool_agent",
-            description="Uses chemistry tools to analyze molecules",
+            description="Uses different tools to analyze molecules",
         )
         self._agent = None
         self._tools = None
