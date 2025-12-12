@@ -26,13 +26,13 @@ Your role is to:
 3. Assign each subtask to the appropriate worker type
 
 Available worker types:
+- "tool": Use chemistry tools (SMILES conversion, MW, similarity, safety)
 - "data_cleaner": Data file preprocessing and cleaning
-- 
 - "reporter": Report generation and summarization
 
 For each task, specify:
-- id: Unique task identifier (e.g., "task_1", "clean_data")
-- type: One of "data_cleaner", "reporter"
+- id: Unique task identifier (e.g., "task_1", "analyze_mol")
+- type: One of "tool", "data_cleaner", "reporter"
 - description: What this task should accomplish
 - inputs: Required input data
 - expected_outputs: List of expected output keys
@@ -43,7 +43,7 @@ Return ONLY a valid JSON object with this structure:
   "tasks": [
     {
       "id": "task_id",
-      "type": "data_cleaner|reporter",
+      "type": "tool|data_cleaner|reporter",
       "description": "Task description",
       "inputs": {},
       "expected_outputs": ["output1"],
@@ -87,7 +87,7 @@ class PlannerAgent(BaseAgent):
             )
             dag = invoke_llm(PLANNER_SYSTEM_PROMPT, user_message, parse_json=True)
 
-            console.print(f"[green]✓ Planner: Received response[/]")
+            console.print("[green]✓ Planner: Received response[/]")
 
             tasks: dict[str, Task] = {}
             for t in dag.get("tasks", []):

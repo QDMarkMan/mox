@@ -148,4 +148,3 @@ Return a JSON object with:
 
 Write the text_report in Markdown format. Be thorough but concise.
 """
-

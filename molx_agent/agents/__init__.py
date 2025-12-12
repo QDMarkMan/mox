@@ -13,6 +13,8 @@ from molx_agent.agents.modules.state import AgentState, Task
 from molx_agent.agents.molx import MolxAgent, run_sar_agent
 from molx_agent.agents.planner import PlannerAgent
 from molx_agent.agents.reporter import ReporterAgent
+from molx_agent.agents.tool_agent import ToolAgent
+from molx_agent.agents.tools import get_all_tools, get_tool_names
 
 __all__ = [
     # Base
@@ -22,9 +24,12 @@ __all__ = [
     "PlannerAgent",
     "DataCleanerAgent",
     "ReporterAgent",
+    "ToolAgent",
     # Types
     "AgentState",
     "Task",
     # Functions
     "run_sar_agent",
+    "get_all_tools",
+    "get_tool_names",
 ]

@@ -26,10 +26,15 @@ dependencies = [
   "typer>=0.4.0",
   "rich>=10.14.0",
   "langgraph>=0.2.0",
+  "langchain>=0.3.0",
   "langchain-openai>=0.2.0",
   "langchain-core>=0.3.0",
+  "langchain-community>=0.3.0",
   "pydantic-settings>=2.0.0",
   "python-dotenv>=1.0.0",
+  # Chemistry tools dependencies
+  "rdkit>=2023.9.1",
+  "requests>=2.25.0",
 ]
 
 [project.optional-dependencies]

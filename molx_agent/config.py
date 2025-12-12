@@ -1,5 +1,6 @@
 """Configuration management for molx-agent."""
 
+import os
 from functools import lru_cache
 from typing import Optional
 

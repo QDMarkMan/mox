@@ -17,6 +17,7 @@ from molx_agent.agents.data_cleaner import DataCleanerAgent
 from molx_agent.agents.modules.state import AgentState
 from molx_agent.agents.planner import PlannerAgent
 from molx_agent.agents.reporter import ReporterAgent
+from molx_agent.agents.tool_agent import ToolAgent
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class MolxAgent(BaseAgent):
         )
         self.planner = PlannerAgent()
         self.data_cleaner = DataCleanerAgent()
+        self.tool_agent = ToolAgent()
         self.reporter = ReporterAgent()
         self._graph = None
 
@@ -58,7 +60,9 @@ class MolxAgent(BaseAgent):
 
         task_type = task.get("type", "")
 
-        if task_type == "data_cleaner":
+        if task_type == "tool":
+            return "tool_agent"
+        elif task_type == "data_cleaner":
             return "data_cleaner"
         elif task_type == "reporter":
             return "reporter"
@@ -79,37 +83,38 @@ class MolxAgent(BaseAgent):
         state["current_task_id"] = self._pick_next_task(state)
         return state
 
+    def _tool_agent_node(self, state: AgentState) -> AgentState:
+        """Execute tool agent and update task scheduling."""
+        state = self.tool_agent.run(state)
+        state["current_task_id"] = self._pick_next_task(state)
+        return state
+
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow."""
         sg = StateGraph(AgentState)
 
         # Add nodes
         sg.add_node("planner", self.planner.run)
+        sg.add_node("tool_agent", self._tool_agent_node)
         sg.add_node("data_cleaner", self._data_cleaner_node)
         sg.add_node("reporter", self.reporter.run)
 
         # Set entry point
         sg.set_entry_point("planner")
 
-        # Add conditional edges from planner
-        sg.add_conditional_edges(
-            "planner",
-            self._route_after_planner,
-            {
-                "data_cleaner": "data_cleaner",
-                "reporter": "reporter",
-            },
-        )
+        # Route mapping for all workers
+        worker_routes = {
+            "tool_agent": "tool_agent",
+            "data_cleaner": "data_cleaner",
+            "reporter": "reporter",
+        }
 
-        # Add conditional edges from data_cleaner
-        sg.add_conditional_edges(
-            "data_cleaner",
-            self._route_after_worker,
-            {
-                "data_cleaner": "data_cleaner",
-                "reporter": "reporter",
-            },
-        )
+        # Add conditional edges from planner
+        sg.add_conditional_edges("planner", self._route_after_planner, worker_routes)
+
+        # Add conditional edges from each worker
+        for worker in ["tool_agent", "data_cleaner"]:
+            sg.add_conditional_edges(worker, self._route_after_worker, worker_routes)
 
         # Reporter leads to END
         sg.add_edge("reporter", END)
