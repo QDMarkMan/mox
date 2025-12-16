@@ -1,35 +1,15 @@
-"""Load available chemistry tools."""
+"""
+**************************************************************************
+*  @Copyright [2025] Xtalpi Systems.
+*  @Author tongfu.e@xtalpi.com
+*  @Date [2025-12-15].
+*  @Description Tools package - exports get_all_tools and get_tool_names.
+**************************************************************************
+"""
 
-# Import only the tools that are compatible with current langchain version
-from molx_agent.tools.rdkit import FuncGroups, MolSimilarity, SMILES2Weight
+from molx_agent.agents.modules.tools import get_all_tools, get_tool_names
 
 __all__ = [
-    "MolSimilarity",
-    "SMILES2Weight",
-    "FuncGroups",
+    "get_all_tools",
+    "get_tool_names",
 ]
-
-# Try to import additional tools, skip if not compatible
-try:
-    from molx_agent.tools.converters import Query2CAS, Query2SMILES, SMILES2Name
-
-    __all__.extend(["Query2CAS", "Query2SMILES", "SMILES2Name"])
-except ImportError:
-    pass
-
-try:
-    from molx_agent.tools.safety import (
-        ControlChemCheck,
-        ExplosiveCheck,
-        SafetySummary,
-        SimilarControlChemCheck,
-    )
-
-    __all__.extend([
-        "ExplosiveCheck",
-        "ControlChemCheck",
-        "SimilarControlChemCheck",
-        "SafetySummary",
-    ])
-except ImportError:
-    pass

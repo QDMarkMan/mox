@@ -166,12 +166,38 @@ class MolxAgent(BaseAgent):
         Returns:
             A tuple of (response, updated_history).
         """
+        from rich.console import Console
+
+        from molx_agent.agents.intent_classifier import (
+            classify_intent,
+            get_intent_response,
+            is_supported_intent,
+        )
+
+        console = Console()
+
         # Initialize history if not provided
         if history is None:
             history = []
 
         # Add user message to history
         history.append({"role": "user", "content": message})
+
+        # Classify user intent
+        console.print("[cyan]🤔 Classifying intent...[/]")
+        intent, confidence = classify_intent(message)
+        console.print(f"[dim]   Intent: {intent.value} ({confidence:.0%})[/]")
+
+        # Check if intent is supported
+        if not is_supported_intent(intent):
+            # Return friendly message for unsupported intents
+            response = get_intent_response(intent)
+            if response is None:
+                response = "抱歉，我不太理解您的需求。请尝试询问分子分析相关的问题。"
+
+            history.append({"role": "assistant", "content": response})
+            console.print("[yellow]⚠ Non-SAR intent detected, providing guidance[/]")
+            return response, history
 
         # Build context from history for the planner
         context = self._build_context(history)

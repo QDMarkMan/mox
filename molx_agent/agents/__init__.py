@@ -14,7 +14,7 @@ from molx_agent.agents.molx import MolxAgent, run_sar_agent
 from molx_agent.agents.planner import PlannerAgent
 from molx_agent.agents.reporter import ReporterAgent
 from molx_agent.agents.tool_agent import ToolAgent
-from molx_agent.agents.tools import get_all_tools, get_tool_names
+from molx_agent.agents.modules.tools import get_all_tools, get_tool_names
 
 __all__ = [
     # Base

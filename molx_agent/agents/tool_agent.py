@@ -16,7 +16,7 @@ from langgraph.prebuilt import create_react_agent
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.llm import get_llm
 from molx_agent.agents.modules.state import AgentState
-from molx_agent.agents.tools import get_all_tools
+from molx_agent.agents.modules.tools import get_all_tools
 
 logger = logging.getLogger(__name__)
 
