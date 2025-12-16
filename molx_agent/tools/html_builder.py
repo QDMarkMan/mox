@@ -19,154 +19,505 @@ REPORT_DIR = os.path.join(os.getcwd(), "output", "reports")
 
 SAR_REPORT_CSS = """
 :root {
-    --primary: #2563eb;
-    --success: #10b981;
-    --warning: #f59e0b;
-    --danger: #ef4444;
-    --gray-50: #f9fafb;
-    --gray-100: #f3f4f6;
-    --gray-200: #e5e7eb;
-    --gray-600: #4b5563;
-    --gray-800: #1f2937;
+    --primary: #4f46e5; /* Indigo 600 */
+    --primary-light: #818cf8; /* Indigo 400 */
+    --primary-dark: #3730a3; /* Indigo 800 */
+    --secondary: #64748b; /* Slate 500 */
+    --success: #10b981; /* Emerald 500 */
+    --warning: #f59e0b; /* Amber 500 */
+    --danger: #ef4444; /* Red 500 */
+    --background: #f8fafc; /* Slate 50 */
+    --surface: #ffffff;
+    --text-main: #0f172a; /* Slate 900 */
+    --text-secondary: #475569; /* Slate 600 */
+    --text-muted: #94a3b8; /* Slate 400 */
+    --border: #e2e8f0; /* Slate 200 */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --radius: 0.75rem;
 }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--gray-50);
-    color: var(--gray-800);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--background);
+    color: var(--text-main);
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
 }
-.container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+.container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* Header */
 .header {
-    background: linear-gradient(135deg, var(--primary), #1e40af);
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     color: white;
-    padding: 3rem 2rem;
-    border-radius: 1rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 10px 40px rgba(37, 99, 235, 0.3);
+    padding: 4rem 3rem;
+    border-radius: 1.5rem;
+    margin-bottom: 3rem;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    overflow: hidden;
 }
-.header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
-.header .meta { opacity: 0.9; }
-.card {
-    background: white;
-    border-radius: 1rem;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+
+.header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at top right, rgba(255,255,255,0.1) 0%, transparent 60%);
+    pointer-events: none;
 }
-.card h2 {
-    color: var(--primary);
-    border-bottom: 2px solid var(--gray-100);
-    padding-bottom: 0.75rem;
+
+.header h1 {
+    font-size: 3rem;
+    font-weight: 800;
     margin-bottom: 1rem;
+    letter-spacing: -0.025em;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-.card h3 { color: var(--gray-600); margin: 1rem 0 0.5rem; }
-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--gray-200); }
-th { background: var(--gray-100); font-weight: 600; color: var(--gray-600); }
-tr:hover { background: var(--gray-50); }
-.badge {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.875rem;
+
+.header .meta {
+    display: flex;
+    gap: 2rem;
+    font-size: 0.95rem;
+    opacity: 0.9;
     font-weight: 500;
 }
+
+.header .meta span {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Cards */
+.card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-lg);
+}
+
+.card h2 {
+    color: var(--text-main);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.card h3 {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.5rem 0 1rem;
+}
+
+/* Tables */
+.table-container {
+    overflow-x: auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.925rem;
+}
+
+th {
+    background: var(--background);
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 1rem 1.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+td {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
+
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--background); }
+
+/* Badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
 .badge-essential { background: #dcfce7; color: #166534; }
 .badge-beneficial { background: #dbeafe; color: #1e40af; }
 .badge-tolerated { background: #fef3c7; color: #92400e; }
 .badge-detrimental { background: #fee2e2; color: #991b1b; }
-.conclusion {
-    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-    border-left: 4px solid var(--primary);
-    padding: 1rem 1.5rem;
-    margin: 1rem 0;
-    border-radius: 0 0.5rem 0.5rem 0;
-}
+
+/* Stats Grid */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 1rem;
-    margin: 1rem 0;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1rem;
 }
+
 .stat-card {
-    background: var(--gray-50);
+    background: linear-gradient(145deg, var(--background), #fff);
     padding: 1.5rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
     text-align: center;
 }
-.stat-value { font-size: 2rem; font-weight: 700; color: var(--primary); }
-.stat-label { color: var(--gray-600); font-size: 0.875rem; margin-top: 0.25rem; }
-.smiles { font-family: monospace; font-size: 0.75rem; word-break: break-all; }
-.footer { text-align: center; padding: 2rem; color: var(--gray-600); }
-.mol-svg { 
-    display: inline-block; 
-    background: white; 
-    border-radius: 0.5rem; 
-    border: 1px solid var(--gray-200);
-    padding: 0.25rem;
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--primary);
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
 }
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Molecule Grid */
 .mol-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 1rem;
-    margin: 1rem 0;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
 }
+
 .mol-card {
-    background: var(--gray-50);
-    border-radius: 0.75rem;
-    padding: 0.75rem;
-    text-align: center;
-    border: 1px solid var(--gray-200);
-    transition: box-shadow 0.2s;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 1rem;
+    border: 1px solid var(--border);
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
+
 .mol-card:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow);
+    border-color: var(--primary-light);
 }
-.mol-card .mol-svg svg {
-    max-width: 100%;
-    height: auto;
+
+.mol-svg {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-.mol-card .mol-id {
-    font-weight: 600;
-    color: var(--gray-800);
-    margin-top: 0.5rem;
-    font-size: 0.875rem;
+
+.mol-id {
+    font-weight: 700;
+    color: var(--text-main);
+    font-size: 0.9rem;
 }
-.mol-card .mol-activity {
+
+.mol-activity {
     color: var(--primary);
-    font-weight: 500;
-    font-size: 0.75rem;
+    font-weight: 600;
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    background: #e0e7ff;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
 }
-.mol-pair {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
-    background: var(--gray-50);
-    border-radius: 0.75rem;
-    margin: 0.5rem 0;
+
+/* R-Group Table Specifics */
+.rgroup-table .mol-cell { min-width: 180px; }
+.rgroup-table .rgroup-cell {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    color: var(--text-main);
+    background: #f8fafc;
 }
-.mol-pair .arrow {
-    font-size: 1.5rem;
-    color: var(--gray-400);
+.rgroup-table .activity-cell {
+    font-weight: 700;
+    color: var(--primary);
 }
-.scaffold-display {
-    background: linear-gradient(135deg, #fef3c7, #fde68a);
-    border-left: 4px solid var(--warning);
-    padding: 1rem;
+
+/* Conclusion Box */
+.conclusion {
+    background: linear-gradient(to right, #eff6ff, #f8fafc);
+    border-left: 4px solid var(--primary);
+    padding: 1.25rem 1.5rem;
+    margin-top: 1.5rem;
     border-radius: 0 0.5rem 0.5rem 0;
-    margin: 1rem 0;
+    color: var(--text-main);
+    font-size: 0.95rem;
     display: flex;
-    align-items: center;
-    gap: 1rem;
+    align-items: flex-start;
+    gap: 0.75rem;
 }
+
+.conclusion strong { color: var(--primary-dark); }
+
+/* Footer */
+.footer {
+    text-align: center;
+    padding: 3rem 0;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    border-top: 1px solid var(--border);
+    margin-top: 4rem;
+}
+
+/* Utilities */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.font-mono { font-family: monospace; }
 """
 
 
 # =============================================================================
 # Section Builders
 # =============================================================================
+
+def build_rgroup_decomposition_table_section(
+    r_group_data: dict,
+    scaffold: str = None,
+    scaffold_strategy: str = None,
+) -> str:
+    """Build R-group decomposition table with molecule SVGs and core highlighting.
+    
+    Args:
+        r_group_data: Dict containing decomposed_compounds and ocat_pairs.
+        scaffold: SMARTS/SMILES of the core scaffold.
+        scaffold_strategy: Strategy used (mcs, murcko, custom).
+    
+    Returns:
+        HTML string for the R-group decomposition section.
+    """
+    decomposed = r_group_data.get("decomposed_compounds", [])
+    
+    if not decomposed:
+        return ""
+    
+    # Import RDKit for molecule rendering
+    from rdkit import Chem
+    from rdkit.Chem.Draw import rdMolDraw2D
+    from rdkit.Chem import AllChem
+    
+    def _render_mol_with_highlight(smiles: str, core_smarts: str = None, width: int = 140, height: int = 100) -> str:
+        """Render molecule SVG with core scaffold highlighted."""
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                return f'<svg width="{width}" height="{height}"><rect width="100%" height="100%" fill="#f3f4f6"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="10">Invalid</text></svg>'
+            
+            AllChem.Compute2DCoords(mol)
+            
+            highlight_atoms = []
+            highlight_bonds = []
+            atom_colors = {}
+            bond_colors = {}
+            
+            # Highlight core scaffold if provided
+            if core_smarts:
+                core = Chem.MolFromSmarts(core_smarts)
+                if core is None:
+                    core = Chem.MolFromSmiles(core_smarts)
+                
+                if core:
+                    match = mol.GetSubstructMatch(core)
+                    if match:
+                        highlight_atoms = list(match)
+                        # Get bonds within the match
+                        for bond in mol.GetBonds():
+                            if bond.GetBeginAtomIdx() in match and bond.GetEndAtomIdx() in match:
+                                highlight_bonds.append(bond.GetIdx())
+                        # Color core atoms BRIGHT ORANGE for high visibility
+                        for idx in highlight_atoms:
+                            atom_colors[idx] = (1.0, 0.5, 0.0, 0.7)
+                        for idx in highlight_bonds:
+                            bond_colors[idx] = (1.0, 0.5, 0.0, 0.8)
+            
+            drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+            drawer.drawOptions().bondLineWidth = 1.5
+            drawer.DrawMolecule(
+                mol,
+                highlightAtoms=highlight_atoms,
+                highlightBonds=highlight_bonds,
+                highlightAtomColors=atom_colors if atom_colors else {},
+                highlightBondColors=bond_colors if bond_colors else {},
+            )
+            drawer.FinishDrawing()
+            svg = drawer.GetDrawingText()
+            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
+        except Exception:
+            return f'<svg width="{width}" height="{height}"><rect width="100%" height="100%" fill="#f3f4f6"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="10">Error</text></svg>'
+    
+    def _render_rgroup(rgroup_smi: str, width: int = 80, height: int = 60) -> str:
+        """Render R-group fragment SVG."""
+        if not rgroup_smi or rgroup_smi.startswith("[*"):
+            return f'<span style="color:#6b7280">-</span>'
+        try:
+            mol = Chem.MolFromSmiles(rgroup_smi)
+            if mol is None:
+                return f'<code>{rgroup_smi[:15]}</code>'
+            
+            AllChem.Compute2DCoords(mol)
+            drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+            drawer.drawOptions().bondLineWidth = 1.0
+            drawer.DrawMolecule(mol)
+            drawer.FinishDrawing()
+            svg = drawer.GetDrawingText()
+            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
+        except Exception:
+            return f'<code>{rgroup_smi[:15]}</code>'
+    
+    # Get all R-group positions
+    all_r_positions = set()
+    for cpd in decomposed:
+        all_r_positions.update(cpd.get("r_groups", {}).keys())
+    r_positions = sorted(all_r_positions)
+    
+    # Build HTML
+    html = '<div class="card"><h2>🧬 R-Group Decomposition Table</h2>'
+    
+    # Show scaffold legend with visualization and strategy reason
+    strategy_names = {"mcs": "MCS (Maximum Common Substructure)", "murcko": "Murcko Scaffold", "custom": "Custom Scaffold", "none": "None"}
+    strategy_reasons = {
+        "mcs": "Based on 80% threshold MCS detection.",
+        "murcko": "Extracted Murcko scaffold (core ring system).",
+        "custom": "User-defined core scaffold.",
+        "none": "No common scaffold identified.",
+    }
+    
+    if scaffold:
+        # Render scaffold as molecule SVG
+        def _render_scaffold_svg(scaffold_str: str, width: int = 150, height: int = 100) -> str:
+            """Render scaffold pattern as SVG."""
+            try:
+                # Try as SMARTS first, then SMILES
+                mol = Chem.MolFromSmarts(scaffold_str)
+                if mol is None:
+                    mol = Chem.MolFromSmiles(scaffold_str)
+                if mol is None:
+                    return f'<code style="font-size:0.7rem">{scaffold_str[:50]}...</code>'
+                
+                AllChem.Compute2DCoords(mol)
+                drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+                drawer.drawOptions().bondLineWidth = 2.0
+                drawer.DrawMolecule(mol)
+                drawer.FinishDrawing()
+                svg = drawer.GetDrawingText()
+                return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
+            except Exception:
+                return f'<code style="font-size:0.7rem">{scaffold_str[:50]}...</code>'
+        
+        scaffold_svg = _render_scaffold_svg(scaffold, 150, 100)
+        reason = strategy_reasons.get(scaffold_strategy, "Automatic selection")
+        
+        html += f'''
+        <div class="rgroup-legend">
+            <div style="flex:1">
+                <strong>🔬 Core Scaffold</strong>
+                <span class="strategy-badge">{strategy_names.get(scaffold_strategy, scaffold_strategy or "auto")}</span>
+                <div style="margin-top:0.5rem;font-size:0.875rem;opacity:0.9">💡 Reason: {reason}</div>
+            </div>
+            <div class="core-scaffold">
+                {scaffold_svg}
+            </div>
+        </div>
+        '''
+    
+    html += f'<p style="margin-bottom:1rem;color:var(--text-secondary)">Decomposed <strong>{len(decomposed)}</strong> compounds, identified <strong>{len(r_positions)}</strong> R-group positions.</p>'
+    
+    # Build table
+    html += '<div class="table-container"><table class="rgroup-table">'
+    
+    # Header
+    html += '<thead><tr>'
+    html += '<th>ID</th>'
+    html += '<th class="mol-cell">Structure (Core Highlighted)</th>'
+    for pos in r_positions:
+        html += f'<th class="rgroup-cell">{pos}</th>'
+    html += '<th class="activity-cell">Name</th>'
+    html += '<th class="activity-cell">Activity</th>'
+    html += '</tr></thead>'
+    
+    # Body
+    html += '<tbody>'
+    max_display = min(len(decomposed), 30)  # Limit to 30 rows
+    
+    for cpd in decomposed[:max_display]:
+        cpd_id = cpd.get("compound_id", "")
+        smiles = cpd.get("smiles", "")
+        activity = cpd.get("activity")
+        # Use name from original data, fallback to compound_id
+        name = cpd.get("name") or cpd.get("Name") or cpd_id
+        r_groups = cpd.get("r_groups", {})
+        
+        mol_svg = _render_mol_with_highlight(smiles, scaffold, 140, 100)
+        
+        html += '<tr>'
+        html += f'<td><strong>{cpd_id}</strong></td>'
+        html += f'<td class="mol-cell">{mol_svg}</td>'
+        
+        for pos in r_positions:
+            rg = r_groups.get(pos, "")
+            rg_svg = _render_rgroup(rg)
+            html += f'<td class="rgroup-cell">{rg_svg}</td>'
+        
+        html += f'<td class="activity-cell">{name}</td>'
+        act_str = f"{activity}" if activity is not None else "-"
+        html += f'<td class="activity-cell">{act_str}</td>'
+        html += '</tr>'
+    
+    html += '</tbody></table></div>'
+    
+    if len(decomposed) > max_display:
+        html += f'<p style="color:var(--text-muted);font-size:0.875rem;margin-top:1rem;text-align:center">Showing first {max_display} of {len(decomposed)} records</p>'
+    
+    html += '</div>'
+    return html
+
 
 def build_stats_section(sar_data: dict) -> str:
     """Build summary statistics section."""
@@ -227,10 +578,10 @@ def build_compound_gallery_section(compounds: list[dict], max_display: int = 24)
         except Exception:
             return f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Error</text></svg>'
     
-    html = '<div class="card"><h2>🧬 化合物总览 (Compound Gallery)</h2>'
-    html += f'<p>共 {len(compounds)} 个化合物'
+    html = '<div class="card"><h2>🧬 Compound Gallery</h2>'
+    html += f'<p style="margin-bottom:1.5rem;color:var(--text-secondary)">Total {len(compounds)} compounds'
     if len(compounds) > max_display:
-        html += f'，显示前 {max_display} 个'
+        html += f', showing first {max_display}'
     html += '</p>'
     
     html += '<div class="mol-grid">'
@@ -240,9 +591,9 @@ def build_compound_gallery_section(compounds: list[dict], max_display: int = 24)
         compound_id = cpd.get("compound_id", f"Cpd-{i+1}")
         activity = cpd.get("activity")
         
-        svg = _smiles_to_svg(smiles, width=180, height=140)
+        svg = _smiles_to_svg(smiles, width=200, height=150)
         
-        activity_str = f"Activity: {activity}" if activity is not None else ""
+        activity_str = f"Act: {activity}" if activity is not None else ""
         
         html += f'''
         <div class="mol-card">
@@ -266,27 +617,28 @@ def build_rgroup_section(rgroup_data: dict) -> str:
     if not recommendations and not r_group_analysis:
         return ""
 
-    html = '<div class="card"><h2>🧪 R-group 分析 (R-Group SAR)</h2>'
+    html = '<div class="card"><h2>🧪 R-Group SAR Analysis</h2>'
 
     # Activity range
     activity_range = rgroup_data.get("activity_range", {})
     if activity_range.get("min") is not None:
         html += f'''
-        <p><strong>活性范围:</strong> {activity_range.get("min")} - {activity_range.get("max")}</p>
+        <p style="margin-bottom:1rem"><strong>Activity Range:</strong> {activity_range.get("min")} - {activity_range.get("max")}</p>
         '''
 
     # Recommendations table
     if recommendations:
         html += '''
-        <h3>位点最优取代基</h3>
+        <h3>Optimal Substituents</h3>
+        <div class="table-container">
         <table>
             <thead>
                 <tr>
-                    <th>位点</th>
-                    <th>最佳取代基</th>
-                    <th>最佳活性</th>
-                    <th>最差取代基</th>
-                    <th>最差活性</th>
+                    <th>Position</th>
+                    <th>Best Substituent</th>
+                    <th>Best Activity</th>
+                    <th>Worst Substituent</th>
+                    <th>Worst Activity</th>
                 </tr>
             </thead>
             <tbody>'''
@@ -301,13 +653,13 @@ def build_rgroup_section(rgroup_data: dict) -> str:
                     <td>{rec.get('worst_activity', '')}</td>
                 </tr>'''
 
-        html += '</tbody></table>'
+        html += '</tbody></table></div>'
 
     # Detailed R-group analysis
     if r_group_analysis:
-        html += '<h3>R-group 详细分析</h3>'
+        html += '<h3>Detailed Analysis</h3>'
         for r_name, values in r_group_analysis.items():
-            html += f'<h4>{r_name}</h4><table><thead><tr><th>取代基</th><th>数量</th><th>平均活性</th><th>活性范围</th></tr></thead><tbody>'
+            html += f'<h4>{r_name}</h4><div class="table-container"><table><thead><tr><th>Substituent</th><th>Count</th><th>Mean Activity</th><th>Range</th></tr></thead><tbody>'
             for r_value, stats in values.items():
                 html += f'''
                     <tr>
@@ -316,12 +668,12 @@ def build_rgroup_section(rgroup_data: dict) -> str:
                         <td>{stats.get('mean_activity', '')}</td>
                         <td>{stats.get('min_activity', '')} - {stats.get('max_activity', '')}</td>
                     </tr>'''
-            html += '</tbody></table>'
+            html += '</tbody></table></div>'
 
     # Conclusion
     if recommendations:
         best_parts = [f"{r['position']}={r['best_substituent']}" for r in recommendations[:3]]
-        html += f'<div class="conclusion">💡 <strong>SAR 结论:</strong> 最优组合为 {", ".join(best_parts)}</div>'
+        html += f'<div class="conclusion"><strong>SAR Conclusion:</strong> Optimal combination appears to be {", ".join(best_parts)}</div>'
 
     html += '</div>'
     return html
@@ -341,43 +693,44 @@ def build_functional_group_section(fg_data: dict) -> str:
     if not fg_list:
         return ""
 
-    html = '<div class="card"><h2>⚗️ 官能团 SAR (Functional Group SAR)</h2>'
+    html = '<div class="card"><h2>⚗️ Functional Group SAR</h2>'
     html += '''
+    <div class="table-container">
     <table>
         <thead>
             <tr>
-                <th>官能团</th>
-                <th>SAR 结论</th>
-                <th>倍数变化</th>
-                <th>有/无平均活性</th>
+                <th>Functional Group</th>
+                <th>Effect</th>
+                <th>Fold Change</th>
+                <th>Avg Activity (With / Without)</th>
             </tr>
         </thead>
         <tbody>'''
 
     badge_map = {
-        "essential": ("badge-essential", "必需"),
-        "beneficial": ("badge-beneficial", "有利"),
-        "tolerated": ("badge-tolerated", "中性"),
-        "detrimental": ("badge-detrimental", "有害"),
+        "essential": ("badge-essential", "Essential"),
+        "beneficial": ("badge-beneficial", "Beneficial"),
+        "tolerated": ("badge-tolerated", "Neutral"),
+        "detrimental": ("badge-detrimental", "Detrimental"),
     }
 
     for fg in fg_list:
         effect = fg.get("effect", "")
-        badge_class, effect_cn = badge_map.get(effect, ("", effect))
+        badge_class, effect_en = badge_map.get(effect, ("", effect))
         html += f'''
             <tr>
                 <td><strong>{fg.get('functional_group', '')}</strong></td>
-                <td><span class="badge {badge_class}">{effect_cn}</span></td>
+                <td><span class="badge {badge_class}">{effect_en}</span></td>
                 <td>{fg.get('fold_change', '')}x</td>
                 <td>{fg.get('avg_activity_with', '')} / {fg.get('avg_activity_without', '')}</td>
             </tr>'''
 
-    html += '</tbody></table>'
+    html += '</tbody></table></div>'
 
     # Conclusion
     essential_fgs = [f["functional_group"] for f in fg_list if f.get("effect") == "essential"]
     if essential_fgs:
-        html += f'<div class="conclusion">💡 <strong>关键发现:</strong> {", ".join(essential_fgs)} 为必需官能团，对活性至关重要。</div>'
+        html += f'<div class="conclusion"><strong>Key Findings:</strong> {", ".join(essential_fgs)} are essential for activity.</div>'
 
     html += '</div>'
     return html
@@ -392,31 +745,33 @@ def build_conformational_section(conf_data: dict) -> str:
     if not conf_data.get("planarity") and not conf_data.get("rigidity") and not conf_data.get("conclusions"):
         return ""
 
-    html = '<div class="card"><h2>🧬 构象 SAR (Conformational SAR)</h2>'
+    html = '<div class="card"><h2>🧬 Conformational SAR</h2>'
 
     if conf_data.get("planarity"):
         p = conf_data["planarity"]
         html += f'''
-        <h3>平面性分析</h3>
+        <h3>Planarity Analysis</h3>
+        <div class="table-container">
         <table>
-            <tr><th>平面分子数</th><td>{p.get('planar_count', 'N/A')}</td></tr>
-            <tr><th>非平面分子数</th><td>{p.get('nonplanar_count', 'N/A')}</td></tr>
-            <tr><th>偏好</th><td><strong>{p.get('preference', 'N/A')}</strong></td></tr>
-        </table>'''
+            <tr><th>Planar Molecules</th><td>{p.get('planar_count', 'N/A')}</td></tr>
+            <tr><th>Non-planar Molecules</th><td>{p.get('nonplanar_count', 'N/A')}</td></tr>
+            <tr><th>Preference</th><td><strong>{p.get('preference', 'N/A')}</strong></td></tr>
+        </table></div>'''
 
     if conf_data.get("rigidity"):
         r = conf_data["rigidity"]
         html += f'''
-        <h3>刚性分析</h3>
+        <h3>Rigidity Analysis</h3>
+        <div class="table-container">
         <table>
-            <tr><th>刚性分子数</th><td>{r.get('rigid_count', 'N/A')}</td></tr>
-            <tr><th>柔性分子数</th><td>{r.get('flexible_count', 'N/A')}</td></tr>
-            <tr><th>偏好</th><td><strong>{r.get('preference', 'N/A')}</strong></td></tr>
-        </table>'''
+            <tr><th>Rigid Molecules</th><td>{r.get('rigid_count', 'N/A')}</td></tr>
+            <tr><th>Flexible Molecules</th><td>{r.get('flexible_count', 'N/A')}</td></tr>
+            <tr><th>Preference</th><td><strong>{r.get('preference', 'N/A')}</strong></td></tr>
+        </table></div>'''
 
     if conf_data.get("conclusions"):
         for c in conf_data["conclusions"]:
-            html += f'<div class="conclusion">💡 {c}</div>'
+            html += f'<div class="conclusion"><strong>Insight:</strong> {c}</div>'
 
     html += '</div>'
     return html
@@ -455,12 +810,12 @@ def build_activity_cliffs_section(cliffs_data: dict) -> str:
         cliffs = cliffs_data.get("cliffs", [])
         count = cliffs_data.get("activity_cliffs_found", 0)
 
-    html = f'<div class="card"><h2>⚠️ 活性悬崖 (Activity Cliffs)</h2>'
-    html += f'<p>发现 <strong>{count}</strong> 对活性悬崖 (结构相似度 &gt; 0.7, 活性差异 &gt; 10倍)</p>'
+    html = f'<div class="card"><h2>⚠️ Activity Cliffs</h2>'
+    html += f'<p>Found <strong>{count}</strong> pairs of activity cliffs (Similarity &gt; 0.7, Activity Diff &gt; 10x)</p>'
 
     if cliffs:
         # Show visual comparison for top cliffs
-        html += '<h3>结构对比</h3>'
+        html += '<h3>Structural Comparison</h3>'
         for cliff in cliffs[:5]:
             smi1 = cliff.get('mol1', '')
             smi2 = cliff.get('mol2', '')
@@ -483,23 +838,24 @@ def build_activity_cliffs_section(cliffs_data: dict) -> str:
                     <div class="mol-svg">{svg2}</div>
                     <div style="font-size:0.875rem;margin-top:0.5rem">Activity: <strong>{act2}</strong></div>
                 </div>
-                <div style="font-size:0.75rem;color:#6b7280">
-                    相似度: {sim}
+                <div style="font-size:0.75rem;color:var(--text-secondary)">
+                    Similarity: {sim}
                 </div>
             </div>'''
 
         # Also show a summary table
         html += '''
-        <h3>详细数据</h3>
+        <h3>Detailed Data</h3>
+        <div class="table-container">
         <table>
             <thead>
                 <tr>
-                    <th>分子1 (SMILES)</th>
-                    <th>分子2 (SMILES)</th>
-                    <th>相似度</th>
-                    <th>活性1</th>
-                    <th>活性2</th>
-                    <th>倍数差</th>
+                    <th>Molecule 1 (SMILES)</th>
+                    <th>Molecule 2 (SMILES)</th>
+                    <th>Similarity</th>
+                    <th>Activity 1</th>
+                    <th>Activity 2</th>
+                    <th>Fold Change</th>
                 </tr>
             </thead>
             <tbody>'''
@@ -517,10 +873,10 @@ def build_activity_cliffs_section(cliffs_data: dict) -> str:
                     <td><strong>{cliff.get('fold_change', '')}x</strong></td>
                 </tr>'''
 
-        html += '</tbody></table>'
+        html += '</tbody></table></div>'
 
         if count > 0:
-            html += '<div class="conclusion">💡 活性悬崖表明小的结构变化可导致显著的活性差异，这些位点值得深入研究。</div>'
+            html += '<div class="conclusion"><strong>Insight:</strong> Small structural changes leading to large activity differences indicate critical SAR regions.</div>'
 
     html += '</div>'
     return html
@@ -531,21 +887,22 @@ def build_scaffold_section(scaffold_data: dict) -> str:
     if not scaffold_data or "error" in scaffold_data:
         return ""
 
-    html = '<div class="card"><h2>🔬 骨架 SAR (Scaffold SAR)</h2>'
+    html = '<div class="card"><h2>🔬 Scaffold SAR</h2>'
 
     core = scaffold_data.get("core_scaffold", "N/A")
-    essential = "是" if scaffold_data.get("scaffold_essential") else "否"
+    essential = "Yes" if scaffold_data.get("scaffold_essential") else "No"
 
     html += f'''
+    <div class="table-container">
     <table>
-        <tr><th>核心骨架</th><td class="smiles">{core}</td></tr>
-        <tr><th>骨架必需性</th><td>{essential}</td></tr>
-        <tr><th>保守骨架化合物</th><td>{scaffold_data.get('scaffold_conserved', 'N/A')}</td></tr>
-        <tr><th>变异骨架化合物</th><td>{scaffold_data.get('scaffold_varied', 'N/A')}</td></tr>
-    </table>'''
+        <tr><th>Core Scaffold</th><td class="smiles">{core}</td></tr>
+        <tr><th>Essential?</th><td>{essential}</td></tr>
+        <tr><th>Conserved Count</th><td>{scaffold_data.get('scaffold_conserved', 'N/A')}</td></tr>
+        <tr><th>Varied Count</th><td>{scaffold_data.get('scaffold_varied', 'N/A')}</td></tr>
+    </table></div>'''
 
     if scaffold_data.get("conclusion"):
-        html += f'<div class="conclusion">💡 {scaffold_data["conclusion"]}</div>'
+        html += f'<div class="conclusion"><strong>Conclusion:</strong> {scaffold_data["conclusion"]}</div>'
 
     html += '</div>'
     return html
@@ -560,16 +917,17 @@ def build_positional_section(pos_data: dict) -> str:
     if not positions:
         return ""
 
-    html = '<div class="card"><h2>📍 位点 SAR (Positional SAR)</h2>'
+    html = '<div class="card"><h2>📍 Positional SAR</h2>'
 
     for pos in positions:
         html += f'''
         <h3>{pos.get('position', 'Unknown')}</h3>
+        <div class="table-container">
         <table>
-            <tr><th>最佳取代基</th><td>{pos.get('best_substituent', 'N/A')}</td></tr>
-            <tr><th>最佳活性</th><td>{pos.get('best_activity', 'N/A')}</td></tr>
-            <tr><th>尺寸偏好</th><td>{pos.get('size_preference', 'N/A')}</td></tr>
-        </table>'''
+            <tr><th>Best Substituent</th><td>{pos.get('best_substituent', 'N/A')}</td></tr>
+            <tr><th>Best Activity</th><td>{pos.get('best_activity', 'N/A')}</td></tr>
+            <tr><th>Size Preference</th><td>{pos.get('size_preference', 'N/A')}</td></tr>
+        </table></div>'''
 
     html += '</div>'
     return html
@@ -599,14 +957,15 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
     <style>{SAR_REPORT_CSS}</style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 {title}</h1>
+            <h1>{title}</h1>
             <div class="meta">
-                <span>Generated: {timestamp}</span> |
-                <span>Total Compounds: {total_compounds}</span>
+                <span>📅 Generated: {timestamp}</span>
+                <span>🧪 Total Compounds: {total_compounds}</span>
             </div>
         </div>
 '''
@@ -620,7 +979,20 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
 
     # Pass the raw tool output to each section builder
     # Each tool returns a dict that the section builder knows how to parse
+    
+    # Add R-group decomposition table with molecule visualization
     if "r_group_analysis" in sar_data:
+        rgroup_data = sar_data["r_group_analysis"]
+        scaffold = sar_data.get("scaffold")
+        scaffold_strategy = sar_data.get("scaffold_strategy")
+        
+        # If decomposed_compounds exist, show the visual table
+        if rgroup_data.get("decomposed_compounds"):
+            html += build_rgroup_decomposition_table_section(
+                rgroup_data, scaffold, scaffold_strategy
+            )
+        
+        # Show traditional R-group analysis statistics
         html += build_rgroup_section(sar_data["r_group_analysis"])
 
     if "scaffold_sar" in sar_data:

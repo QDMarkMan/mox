@@ -43,25 +43,31 @@ class ReporterAgent(BaseAgent):
         results = state.get("results", {})
 
         try:
-            # 1. Collect compound data
-            compound_data = self._collect_compounds(results)
+            # Check for SAR Agent results first
+            sar_agent_results = self._get_sar_agent_results(results)
+            
+            if sar_agent_results:
+                console.print("[dim]   Using SAR Agent analysis results...[/]")
+                compound_data = sar_agent_results.get("compounds", [])
+                sar_results = self._merge_sar_results(sar_agent_results)
+            else:
+                # Fallback: run analysis if no SAR Agent results
+                compound_data = self._collect_compounds(results)
+                
+                if not compound_data:
+                    console.print("[yellow]⚠ No compound data found[/]")
+                    state["final_answer"] = "No compound data available for SAR analysis."
+                    return state
+                
+                console.print(f"[dim]   Found {len(compound_data)} compounds[/]")
+                console.print("[dim]   Running SAR analyses...[/]")
+                sar_results = self._run_analyses(compound_data)
 
-            if not compound_data:
-                console.print("[yellow]⚠ No compound data found[/]")
-                state["final_answer"] = "No compound data available for SAR analysis."
-                return state
-
-            console.print(f"[dim]   Found {len(compound_data)} compounds[/]")
-
-            # 2. Run SAR analyses
-            console.print("[dim]   Running SAR analyses...[/]")
-            sar_results = self._run_analyses(compound_data)
-
-            # 3. Generate HTML report
+            # Generate HTML report
             console.print("[dim]   Generating HTML report...[/]")
             report_path = self._generate_report(sar_results)
 
-            # 4. Update state
+            # Update state
             state["final_answer"] = self._build_summary(sar_results, report_path)
             state["results"]["sar_analysis"] = sar_results
             state["results"]["report_path"] = report_path
@@ -75,6 +81,59 @@ class ReporterAgent(BaseAgent):
             state["error"] = str(e)
 
         return state
+
+    def _get_sar_agent_results(self, results: dict) -> dict | None:
+        """Get results from SAR Agent if available."""
+        for task_id, result in results.items():
+            if isinstance(result, dict) and "decomposed_compounds" in result:
+                return result
+        return None
+
+    def _merge_sar_results(self, sar_agent_results: dict) -> dict:
+        """Merge SAR Agent results with additional analyses for reporting."""
+        from molx_agent.tools.report import (
+            GenerateFunctionalGroupSAR,
+            IdentifyActivityCliffs,
+            GenerateConformationalSAR,
+        )
+
+        compounds = sar_agent_results.get("compounds", [])
+        decomposed = sar_agent_results.get("decomposed_compounds", [])
+        
+        sar_results = {
+            "total_compounds": len(compounds),
+            "generated_at": datetime.now().isoformat(),
+            "compounds": compounds,
+            "scaffold_strategy": sar_agent_results.get("scaffold_strategy"),
+            "scaffold": sar_agent_results.get("scaffold"),
+            "r_group_analysis": {
+                "decomposed_compounds": decomposed,
+                "ocat_pairs": sar_agent_results.get("ocat_pairs", []),
+            },
+        }
+        
+        data_json = json.dumps(compounds)
+        
+        # Run supplementary analyses
+        try:
+            result = GenerateFunctionalGroupSAR()._run(data_json)
+            sar_results["functional_group_sar"] = json.loads(result)
+        except Exception as e:
+            logger.error(f"FG SAR error: {e}")
+        
+        try:
+            result = IdentifyActivityCliffs()._run(data_json)
+            sar_results["activity_cliffs"] = json.loads(result)
+        except Exception as e:
+            logger.error(f"Activity cliffs error: {e}")
+        
+        try:
+            result = GenerateConformationalSAR()._run(data_json)
+            sar_results["conformational_sar"] = json.loads(result)
+        except Exception as e:
+            logger.error(f"Conformational SAR error: {e}")
+        
+        return sar_results
 
     def _collect_compounds(self, results: dict) -> list[dict]:
         """Collect compound data from task results.
@@ -103,6 +162,7 @@ class ReporterAgent(BaseAgent):
                                 "smiles": smi,
                                 "activity": item.get("activity"),
                                 "compound_id": item.get("compound_id", f"Cpd-{i+1}"),
+                                "name": item.get("name") or item.get("Name"),
                             })
                     elif isinstance(item, str) and item:  # SMILES string
                         activities = result.get("activities", [])
@@ -238,12 +298,12 @@ class ReporterAgent(BaseAgent):
         if fg.get("functional_group_sar"):
             essential = [f["functional_group"] for f in fg["functional_group_sar"] if f.get("effect") == "essential"]
             if essential:
-                summary += f"- **必需官能团:** {', '.join(essential)}\n"
+                summary += f"- **Essential Functional Groups:** {', '.join(essential)}\n"
 
         # Activity cliffs
         cliffs = sar_results.get("activity_cliffs", {})
         if cliffs.get("activity_cliffs_found"):
-            summary += f"- **活性悬崖:** {cliffs['activity_cliffs_found']} 对\n"
+            summary += f"- **Activity Cliffs:** {cliffs['activity_cliffs_found']} pairs found\n"
 
         # Conformational
         conf = sar_results.get("conformational_sar", {})

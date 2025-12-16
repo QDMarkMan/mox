@@ -28,11 +28,12 @@ Your role is to:
 Available worker types:
 - "tool": Use chemistry tools (SMILES conversion, MW, similarity, safety)
 - "data_cleaner": Data file preprocessing and cleaning
+- "sar": SAR analysis (R-group decomposition, OCAT analysis, scaffold selection)
 - "reporter": Report generation and summarization
 
 For each task, specify:
 - id: Unique task identifier (e.g., "task_1", "analyze_mol")
-- type: One of "tool", "data_cleaner", "reporter"
+- type: One of "tool", "data_cleaner", "sar", "reporter"
 - description: What this task should accomplish
 - inputs: Required input data
 - expected_outputs: List of expected output keys
@@ -43,7 +44,7 @@ Return ONLY a valid JSON object with this structure:
   "tasks": [
     {
       "id": "task_id",
-      "type": "tool|data_cleaner|reporter",
+      "type": "tool|data_cleaner|sar|reporter",
       "description": "Task description",
       "inputs": {},
       "expected_outputs": ["output1"],
@@ -52,7 +53,8 @@ Return ONLY a valid JSON object with this structure:
   ]
 }
 
-Keep the task graph simple. For MVP, prefer 2-3 tasks maximum.
+Keep the task graph simple. For MVP, prefer 2-4 tasks maximum.
+For SAR analysis queries, typical flow is: data_cleaner -> sar -> reporter
 """
 
 

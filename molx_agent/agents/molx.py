@@ -17,6 +17,7 @@ from molx_agent.agents.data_cleaner import DataCleanerAgent
 from molx_agent.agents.modules.state import AgentState, Message
 from molx_agent.agents.planner import PlannerAgent
 from molx_agent.agents.reporter import ReporterAgent
+from molx_agent.agents.sar import SARAgent
 from molx_agent.agents.tool_agent import ToolAgent
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class MolxAgent(BaseAgent):
         self.planner = PlannerAgent()
         self.data_cleaner = DataCleanerAgent()
         self.tool_agent = ToolAgent()
+        self.sar_agent = SARAgent()
         self.reporter = ReporterAgent()
         self._graph = None
 
@@ -64,6 +66,8 @@ class MolxAgent(BaseAgent):
             return "tool_agent"
         elif task_type == "data_cleaner":
             return "data_cleaner"
+        elif task_type == "sar":
+            return "sar_agent"
         elif task_type == "reporter":
             return "reporter"
         else:
@@ -89,6 +93,12 @@ class MolxAgent(BaseAgent):
         state["current_task_id"] = self._pick_next_task(state)
         return state
 
+    def _sar_agent_node(self, state: AgentState) -> AgentState:
+        """Execute SAR agent and update task scheduling."""
+        state = self.sar_agent.run(state)
+        state["current_task_id"] = self._pick_next_task(state)
+        return state
+
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow."""
         sg = StateGraph(AgentState)
@@ -97,6 +107,7 @@ class MolxAgent(BaseAgent):
         sg.add_node("planner", self.planner.run)
         sg.add_node("tool_agent", self._tool_agent_node)
         sg.add_node("data_cleaner", self._data_cleaner_node)
+        sg.add_node("sar_agent", self._sar_agent_node)
         sg.add_node("reporter", self.reporter.run)
 
         # Set entry point
@@ -106,6 +117,7 @@ class MolxAgent(BaseAgent):
         worker_routes = {
             "tool_agent": "tool_agent",
             "data_cleaner": "data_cleaner",
+            "sar_agent": "sar_agent",
             "reporter": "reporter",
         }
 
@@ -113,7 +125,7 @@ class MolxAgent(BaseAgent):
         sg.add_conditional_edges("planner", self._route_after_planner, worker_routes)
 
         # Add conditional edges from each worker
-        for worker in ["tool_agent", "data_cleaner"]:
+        for worker in ["tool_agent", "data_cleaner", "sar_agent"]:
             sg.add_conditional_edges(worker, self._route_after_worker, worker_routes)
 
         # Reporter leads to END

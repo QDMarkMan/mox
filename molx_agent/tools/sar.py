@@ -509,6 +509,289 @@ class ValidateSARData(BaseTool):
 
 
 # =============================================================================
+# Pure Utility Functions (for SARAgent use)
+# =============================================================================
+
+def find_mcs_scaffold(smiles_list: list[str], min_atoms: int = 6) -> Optional[str]:
+    """Find Maximum Common Substructure from a list of SMILES.
+    
+    Args:
+        smiles_list: List of SMILES strings.
+        min_atoms: Minimum number of atoms for valid MCS.
+    
+    Returns:
+        SMARTS pattern of MCS, or None if not found.
+    """
+    mols = []
+    for smi in smiles_list:
+        mol = Chem.MolFromSmiles(smi)
+        if mol:
+            mols.append(mol)
+    
+    if len(mols) < 2:
+        return None
+    
+    try:
+        mcs_result = rdFMCS.FindMCS(
+            mols,
+            threshold=0.8,
+            ringMatchesRingOnly=True,
+            completeRingsOnly=True,
+            timeout=10,
+        )
+        
+        if mcs_result.numAtoms >= min_atoms:
+            return mcs_result.smartsString
+    except Exception as e:
+        logger.warning(f"MCS search failed: {e}")
+    
+    return None
+
+
+def find_murcko_scaffold(smiles: str, generic: bool = False) -> Optional[str]:
+    """Extract Murcko scaffold from a molecule.
+    
+    Args:
+        smiles: SMILES string.
+        generic: If True, return generic scaffold.
+    
+    Returns:
+        Scaffold SMILES, or None if extraction fails.
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return None
+        
+        scaffold = MurckoScaffold.GetScaffoldForMol(mol)
+        
+        if generic:
+            scaffold = MurckoScaffold.MakeScaffoldGeneric(scaffold)
+        
+        return Chem.MolToSmiles(scaffold)
+    except Exception:
+        return None
+
+
+def find_common_murcko_scaffold(smiles_list: list[str]) -> Optional[str]:
+    """Find the most common Murcko scaffold from a list of SMILES.
+    
+    Args:
+        smiles_list: List of SMILES strings.
+    
+    Returns:
+        Most common scaffold SMILES, or None if not found.
+    """
+    scaffold_counts: dict[str, int] = {}
+    
+    for smi in smiles_list:
+        scaffold = find_murcko_scaffold(smi, generic=True)
+        if scaffold:
+            scaffold_counts[scaffold] = scaffold_counts.get(scaffold, 0) + 1
+    
+    if not scaffold_counts:
+        return None
+    
+    return max(scaffold_counts.items(), key=lambda x: x[1])[0]
+
+
+def decompose_r_groups(
+    smiles_list: list[str],
+    core_smarts: str,
+    activities: Optional[list[float]] = None,
+    compound_ids: Optional[list[str]] = None,
+) -> list[dict]:
+    """Decompose molecules into core scaffold + R-groups.
+    
+    Args:
+        smiles_list: List of SMILES strings.
+        core_smarts: SMARTS pattern for the core scaffold.
+        activities: Optional list of activity values.
+        compound_ids: Optional list of compound identifiers.
+    
+    Returns:
+        List of dicts with compound_id, smiles, r_groups, activity.
+    """
+    core_mol = Chem.MolFromSmarts(core_smarts)
+    if core_mol is None:
+        logger.error(f"Invalid core SMARTS: {core_smarts}")
+        return []
+    
+    mols = []
+    valid_indices = []
+    
+    for i, smi in enumerate(smiles_list):
+        mol = Chem.MolFromSmiles(smi)
+        if mol and mol.HasSubstructMatch(core_mol):
+            mols.append(mol)
+            valid_indices.append(i)
+    
+    if not mols:
+        logger.warning("No molecules match the core scaffold")
+        return []
+    
+    try:
+        decomp = rdRGroupDecomposition.RGroupDecomposition(core_mol)
+        
+        for mol in mols:
+            decomp.Add(mol)
+        
+        decomp.Process()
+        results = decomp.GetRGroupsAsRows()
+        
+        decomposed = []
+        for j, (idx, row) in enumerate(zip(valid_indices, results)):
+            smi = smiles_list[idx]
+            
+            r_groups = {}
+            for key, mol in row.items():
+                if key != "Core" and mol is not None:
+                    r_groups[key] = Chem.MolToSmiles(mol)
+            
+            entry = {
+                "compound_id": compound_ids[idx] if compound_ids else f"Cpd-{idx+1}",
+                "smiles": smi,
+                "r_groups": r_groups,
+            }
+            
+            if activities and idx < len(activities):
+                entry["activity"] = activities[idx]
+            
+            decomposed.append(entry)
+        
+        return decomposed
+        
+    except Exception as e:
+        logger.error(f"R-group decomposition failed: {e}")
+        return []
+
+
+def simple_r_group_assignment(
+    smiles_list: list[str],
+    core_scaffold: str,
+    activities: Optional[list[float]] = None,
+    compound_ids: Optional[list[str]] = None,
+) -> list[dict]:
+    """Simple R-group assignment based on substructure matching.
+    
+    Fallback when RGroupDecomposition fails.
+    """
+    core_mol = Chem.MolFromSmarts(core_scaffold)
+    if core_mol is None:
+        core_mol = Chem.MolFromSmiles(core_scaffold)
+    
+    if core_mol is None:
+        return []
+    
+    results = []
+    
+    for i, smi in enumerate(smiles_list):
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            continue
+        
+        match = mol.GetSubstructMatch(core_mol)
+        if not match:
+            continue
+        
+        core_atoms = set(match)
+        all_atoms = set(range(mol.GetNumAtoms()))
+        r_group_atoms = all_atoms - core_atoms
+        
+        r_groups = {}
+        r_idx = 1
+        visited = set()
+        
+        for atom_idx in r_group_atoms:
+            if atom_idx in visited:
+                continue
+            
+            component = [atom_idx]
+            queue = [atom_idx]
+            visited.add(atom_idx)
+            
+            while queue:
+                curr = queue.pop(0)
+                atom = mol.GetAtomWithIdx(curr)
+                for neighbor in atom.GetNeighbors():
+                    n_idx = neighbor.GetIdx()
+                    if n_idx in r_group_atoms and n_idx not in visited:
+                        visited.add(n_idx)
+                        component.append(n_idx)
+                        queue.append(n_idx)
+            
+            r_groups[f"R{r_idx}"] = f"[*:R{r_idx}]"
+            r_idx += 1
+        
+        entry = {
+            "compound_id": compound_ids[i] if compound_ids else f"Cpd-{i+1}",
+            "smiles": smi,
+            "r_groups": r_groups,
+        }
+        
+        if activities and i < len(activities):
+            entry["activity"] = activities[i]
+        
+        results.append(entry)
+    
+    return results
+
+
+def identify_ocat_series(decomposed_compounds: list[dict]) -> list[dict]:
+    """Identify one-change-at-a-time SAR series.
+    
+    Finds pairs of compounds that differ by exactly one R-group.
+    """
+    ocat_series = []
+    n = len(decomposed_compounds)
+    
+    for i in range(n):
+        for j in range(i + 1, n):
+            cpd1 = decomposed_compounds[i]
+            cpd2 = decomposed_compounds[j]
+            
+            r1 = cpd1.get("r_groups", {})
+            r2 = cpd2.get("r_groups", {})
+            
+            all_positions = set(r1.keys()) | set(r2.keys())
+            differences = []
+            
+            for pos in all_positions:
+                v1 = r1.get(pos, "")
+                v2 = r2.get(pos, "")
+                if v1 != v2:
+                    differences.append({
+                        "position": pos,
+                        "value1": v1,
+                        "value2": v2,
+                    })
+            
+            if len(differences) == 1:
+                act1 = cpd1.get("activity")
+                act2 = cpd2.get("activity")
+                
+                fold_change = None
+                if act1 and act2 and min(act1, act2) > 0:
+                    fold_change = round(max(act1, act2) / min(act1, act2), 2)
+                
+                ocat_series.append({
+                    "compound1": cpd1.get("compound_id"),
+                    "compound2": cpd2.get("compound_id"),
+                    "smiles1": cpd1.get("smiles"),
+                    "smiles2": cpd2.get("smiles"),
+                    "activity1": act1,
+                    "activity2": act2,
+                    "fold_change": fold_change,
+                    "varying_position": differences[0]["position"],
+                    "substituent1": differences[0]["value1"],
+                    "substituent2": differences[0]["value2"],
+                })
+    
+    ocat_series.sort(key=lambda x: x.get("fold_change") or 0, reverse=True)
+    return ocat_series
+
+
+# =============================================================================
 # Export all tools
 # =============================================================================
 
@@ -527,3 +810,4 @@ SAR_TOOLS = [
 def get_sar_tools() -> list[BaseTool]:
     """Get all SAR analysis tools."""
     return [tool() for tool in SAR_TOOLS]
+
