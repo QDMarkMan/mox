@@ -439,8 +439,24 @@ class DataCleanerAgent(BaseAgent):
             inputs = task.get("inputs", {})
             user_query = state.get("user_query", "")
 
-            # Combine all possible input sources
-            content = inputs.get("data") or inputs.get("file_path") or description or user_query
+            # Try multiple sources for file path or data
+            # Priority: explicit inputs > task description > user_query
+            content = inputs.get("data") or inputs.get("file_path") or ""
+            
+            # If no explicit input, try to find file path in description or user_query
+            if not content or detect_input_type(content) == 'text':
+                # Check if description contains a file path
+                file_in_desc = extract_file_path(description)
+                if file_in_desc and os.path.exists(file_in_desc):
+                    content = file_in_desc
+                else:
+                    # Check if user_query contains a file path
+                    file_in_query = extract_file_path(user_query)
+                    if file_in_query and os.path.exists(file_in_query):
+                        content = file_in_query
+                    else:
+                        # Fall back to description or user_query
+                        content = description or user_query
 
             # Step 1: Detect input type
             input_type = detect_input_type(content)

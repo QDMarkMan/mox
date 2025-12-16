@@ -77,7 +77,11 @@ class ReporterAgent(BaseAgent):
         return state
 
     def _collect_compounds(self, results: dict) -> list[dict]:
-        """Collect compound data from task results."""
+        """Collect compound data from task results.
+        
+        Collects all compounds with valid SMILES, including those without activity
+        values, to enable structure visualization in the report.
+        """
         compounds = []
 
         for task_id, result in results.items():
@@ -91,28 +95,35 @@ class ReporterAgent(BaseAgent):
 
             # Format 1: compounds as list of dicts (new DataCleaner format)
             if "compounds" in result and isinstance(result["compounds"], list):
-                for item in result["compounds"]:
+                for i, item in enumerate(result["compounds"]):
                     if isinstance(item, dict):
                         smi = item.get("smiles") or item.get("SMILES", "")
-                        act = item.get("activity")
-                        if smi and act is not None:
-                            compounds.append({"smiles": smi, "activity": act})
-                    elif isinstance(item, str):
-                        # Old format: list of SMILES strings
+                        if smi:  # Collect all compounds with valid SMILES
+                            compounds.append({
+                                "smiles": smi,
+                                "activity": item.get("activity"),
+                                "compound_id": item.get("compound_id", f"Cpd-{i+1}"),
+                            })
+                    elif isinstance(item, str) and item:  # SMILES string
                         activities = result.get("activities", [])
-                        idx = result["compounds"].index(item)
-                        act = activities[idx] if idx < len(activities) else None
-                        if item and act is not None:
-                            compounds.append({"smiles": item, "activity": act})
+                        act = activities[i] if i < len(activities) else None
+                        compounds.append({
+                            "smiles": item,
+                            "activity": act,
+                            "compound_id": f"Cpd-{i+1}",
+                        })
 
             # Format 2: raw_data list
             elif "raw_data" in result:
-                for item in result["raw_data"]:
+                for i, item in enumerate(result["raw_data"]):
                     if isinstance(item, dict):
                         smi = item.get("smiles") or item.get("SMILES", "")
-                        act = item.get("activity")
-                        if smi and act is not None:
-                            compounds.append({"smiles": smi, "activity": act})
+                        if smi:
+                            compounds.append({
+                                "smiles": smi,
+                                "activity": item.get("activity"),
+                                "compound_id": item.get("compound_id", f"Cpd-{i+1}"),
+                            })
 
         # If still no compounds found, try to read from output files
         if not compounds:
@@ -168,6 +179,8 @@ class ReporterAgent(BaseAgent):
         sar_results = {
             "total_compounds": len(compound_data),
             "generated_at": datetime.now().isoformat(),
+            # Include compounds for visualization in HTML report
+            "compounds": compound_data,
         }
 
         data_json = json.dumps(compound_data)

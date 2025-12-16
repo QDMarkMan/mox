@@ -99,6 +99,68 @@ tr:hover { background: var(--gray-50); }
 .stat-label { color: var(--gray-600); font-size: 0.875rem; margin-top: 0.25rem; }
 .smiles { font-family: monospace; font-size: 0.75rem; word-break: break-all; }
 .footer { text-align: center; padding: 2rem; color: var(--gray-600); }
+.mol-svg { 
+    display: inline-block; 
+    background: white; 
+    border-radius: 0.5rem; 
+    border: 1px solid var(--gray-200);
+    padding: 0.25rem;
+}
+.mol-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+}
+.mol-card {
+    background: var(--gray-50);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    text-align: center;
+    border: 1px solid var(--gray-200);
+    transition: box-shadow 0.2s;
+}
+.mol-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.mol-card .mol-svg svg {
+    max-width: 100%;
+    height: auto;
+}
+.mol-card .mol-id {
+    font-weight: 600;
+    color: var(--gray-800);
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+}
+.mol-card .mol-activity {
+    color: var(--primary);
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+.mol-pair {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--gray-50);
+    border-radius: 0.75rem;
+    margin: 0.5rem 0;
+}
+.mol-pair .arrow {
+    font-size: 1.5rem;
+    color: var(--gray-400);
+}
+.scaffold-display {
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    border-left: 4px solid var(--warning);
+    padding: 1rem;
+    border-radius: 0 0.5rem 0.5rem 0;
+    margin: 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
 """
 
 
@@ -127,6 +189,68 @@ def build_stats_section(sar_data: dict) -> str:
             <div class="stat-value">{value}</div>
             <div class="stat-label">{label}</div>
         </div>'''
+    html += '</div></div>'
+    return html
+
+
+def build_compound_gallery_section(compounds: list[dict], max_display: int = 24) -> str:
+    """Build compound gallery section with molecule SVG images.
+    
+    Args:
+        compounds: List of compound dicts with 'smiles', 'compound_id', 'activity'.
+        max_display: Maximum number of compounds to display.
+    
+    Returns:
+        HTML string for the compound gallery section.
+    """
+    if not compounds:
+        return ""
+    
+    # Import at function level to avoid circular imports
+    from rdkit import Chem
+    from rdkit.Chem.Draw import rdMolDraw2D
+    from rdkit.Chem import AllChem
+    
+    def _smiles_to_svg(smiles: str, width: int = 180, height: int = 140) -> str:
+        """Generate inline SVG from SMILES (local function to avoid circular import)."""
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                return f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Invalid</text></svg>'
+            AllChem.Compute2DCoords(mol)
+            drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+            drawer.drawOptions().bondLineWidth = 2.0
+            drawer.DrawMolecule(mol)
+            drawer.FinishDrawing()
+            svg = drawer.GetDrawingText()
+            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
+        except Exception:
+            return f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Error</text></svg>'
+    
+    html = '<div class="card"><h2>🧬 化合物总览 (Compound Gallery)</h2>'
+    html += f'<p>共 {len(compounds)} 个化合物'
+    if len(compounds) > max_display:
+        html += f'，显示前 {max_display} 个'
+    html += '</p>'
+    
+    html += '<div class="mol-grid">'
+    
+    for i, cpd in enumerate(compounds[:max_display]):
+        smiles = cpd.get("smiles", "")
+        compound_id = cpd.get("compound_id", f"Cpd-{i+1}")
+        activity = cpd.get("activity")
+        
+        svg = _smiles_to_svg(smiles, width=180, height=140)
+        
+        activity_str = f"Activity: {activity}" if activity is not None else ""
+        
+        html += f'''
+        <div class="mol-card">
+            <div class="mol-svg">{svg}</div>
+            <div class="mol-id">{compound_id}</div>
+            <div class="mol-activity">{activity_str}</div>
+        </div>'''
+    
     html += '</div></div>'
     return html
 
@@ -208,7 +332,12 @@ def build_functional_group_section(fg_data: dict) -> str:
     if not fg_data or "error" in fg_data:
         return ""
 
-    fg_list = fg_data.get("functional_group_sar", [])
+    # Handle both direct list and dict with "functional_group_sar" key
+    if isinstance(fg_data, list):
+        fg_list = fg_data
+    else:
+        fg_list = fg_data.get("functional_group_sar", [])
+    
     if not fg_list:
         return ""
 
@@ -258,6 +387,10 @@ def build_conformational_section(conf_data: dict) -> str:
     """Build conformational SAR section."""
     if not conf_data or "error" in conf_data:
         return ""
+    
+    # Check if there's any meaningful data
+    if not conf_data.get("planarity") and not conf_data.get("rigidity") and not conf_data.get("conclusions"):
+        return ""
 
     html = '<div class="card"><h2>🧬 构象 SAR (Conformational SAR)</h2>'
 
@@ -290,23 +423,79 @@ def build_conformational_section(conf_data: dict) -> str:
 
 
 def build_activity_cliffs_section(cliffs_data: dict) -> str:
-    """Build activity cliffs section."""
+    """Build activity cliffs section with molecule SVGs."""
     if not cliffs_data or "error" in cliffs_data:
         return ""
 
-    cliffs = cliffs_data.get("cliffs", [])
-    count = cliffs_data.get("activity_cliffs_found", 0)
+    # Import at function level to avoid circular imports
+    from rdkit import Chem
+    from rdkit.Chem.Draw import rdMolDraw2D
+    from rdkit.Chem import AllChem
+    
+    def _cliff_smiles_to_svg(smiles: str, width: int = 180, height: int = 140) -> str:
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                return f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Invalid</text></svg>'
+            AllChem.Compute2DCoords(mol)
+            drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+            drawer.drawOptions().bondLineWidth = 2.0
+            drawer.DrawMolecule(mol)
+            drawer.FinishDrawing()
+            svg = drawer.GetDrawingText()
+            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
+        except Exception:
+            return f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Error</text></svg>'
+
+    # Handle both direct list and dict with "cliffs" key
+    if isinstance(cliffs_data, list):
+        cliffs = cliffs_data
+        count = len(cliffs)
+    else:
+        cliffs = cliffs_data.get("cliffs", [])
+        count = cliffs_data.get("activity_cliffs_found", 0)
 
     html = f'<div class="card"><h2>⚠️ 活性悬崖 (Activity Cliffs)</h2>'
     html += f'<p>发现 <strong>{count}</strong> 对活性悬崖 (结构相似度 &gt; 0.7, 活性差异 &gt; 10倍)</p>'
 
     if cliffs:
+        # Show visual comparison for top cliffs
+        html += '<h3>结构对比</h3>'
+        for cliff in cliffs[:5]:
+            smi1 = cliff.get('mol1', '')
+            smi2 = cliff.get('mol2', '')
+            act1 = cliff.get('activity1', 'N/A')
+            act2 = cliff.get('activity2', 'N/A')
+            fold = cliff.get('fold_change', 'N/A')
+            sim = cliff.get('similarity', 'N/A')
+            
+            svg1 = _cliff_smiles_to_svg(smi1, width=180, height=140)
+            svg2 = _cliff_smiles_to_svg(smi2, width=180, height=140)
+            
+            html += f'''
+            <div class="mol-pair">
+                <div style="text-align:center">
+                    <div class="mol-svg">{svg1}</div>
+                    <div style="font-size:0.875rem;margin-top:0.5rem">Activity: <strong>{act1}</strong></div>
+                </div>
+                <div class="arrow">↔️<br><span style="font-size:0.75rem">{fold}x</span></div>
+                <div style="text-align:center">
+                    <div class="mol-svg">{svg2}</div>
+                    <div style="font-size:0.875rem;margin-top:0.5rem">Activity: <strong>{act2}</strong></div>
+                </div>
+                <div style="font-size:0.75rem;color:#6b7280">
+                    相似度: {sim}
+                </div>
+            </div>'''
+
+        # Also show a summary table
         html += '''
+        <h3>详细数据</h3>
         <table>
             <thead>
                 <tr>
-                    <th>分子1</th>
-                    <th>分子2</th>
+                    <th>分子1 (SMILES)</th>
+                    <th>分子2 (SMILES)</th>
                     <th>相似度</th>
                     <th>活性1</th>
                     <th>活性2</th>
@@ -320,8 +509,8 @@ def build_activity_cliffs_section(cliffs_data: dict) -> str:
             smi2 = cliff.get('mol2', '')
             html += f'''
                 <tr>
-                    <td class="smiles">{smi1[:50]}{"..." if len(smi1) > 50 else ""}</td>
-                    <td class="smiles">{smi2[:50]}{"..." if len(smi2) > 50 else ""}</td>
+                    <td class="smiles">{smi1[:40]}{"..." if len(smi1) > 40 else ""}</td>
+                    <td class="smiles">{smi2[:40]}{"..." if len(smi2) > 40 else ""}</td>
                     <td>{cliff.get('similarity', '')}</td>
                     <td>{cliff.get('activity1', '')}</td>
                     <td>{cliff.get('activity2', '')}</td>
@@ -425,6 +614,12 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
     # Add sections
     html += build_stats_section(sar_data)
 
+    # Add compound gallery if compounds are provided
+    if "compounds" in sar_data and sar_data["compounds"]:
+        html += build_compound_gallery_section(sar_data["compounds"])
+
+    # Pass the raw tool output to each section builder
+    # Each tool returns a dict that the section builder knows how to parse
     if "r_group_analysis" in sar_data:
         html += build_rgroup_section(sar_data["r_group_analysis"])
 
@@ -432,6 +627,8 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
         html += build_scaffold_section(sar_data["scaffold_sar"])
 
     if "functional_group_sar" in sar_data:
+        # functional_group_sar tool returns {"functional_group_sar": [...], ...}
+        # so we pass the raw output directly
         html += build_functional_group_section(sar_data["functional_group_sar"])
 
     if "positional_sar" in sar_data:
