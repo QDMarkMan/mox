@@ -1,7 +1,16 @@
-"""State definitions for SAR agent."""
+"""
+**************************************************************************
+*  @Copyright [2025] Xtalpi Systems.
+*  @Author tongfu.e@xtalpi.com 
+*  @Date [2025-12-17 09:47:09].
+*  @Description State definitions for SAR agent.
+**************************************************************************
+"""
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Annotated
 
+from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 
@@ -31,7 +40,7 @@ class AgentState(TypedDict, total=False):
     user_query: str
 
     # Conversation history (for multi-turn)
-    messages: list[Message]
+    messages: Annotated[list[BaseMessage], add_messages]
 
     # Task management
     tasks: dict[str, Task]

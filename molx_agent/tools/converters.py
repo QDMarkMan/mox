@@ -1,4 +1,13 @@
-"""Chemical molecule converters."""
+"""
+**************************************************************************
+*  @Copyright [2025] Xtalpi Systems.
+*  @Author tongfu.e@xtalpi.com 
+*  @Date [2025-12-16 18:35:19].
+*  @Description Chemical molecule converters.
+*  @Todo: Need test
+**************************************************************************
+"""
+
 
 from typing import Any, Optional
 

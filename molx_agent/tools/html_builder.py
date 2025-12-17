@@ -19,23 +19,22 @@ REPORT_DIR = os.path.join(os.getcwd(), "output", "reports")
 
 SAR_REPORT_CSS = """
 :root {
-    --primary: #4f46e5; /* Indigo 600 */
-    --primary-light: #818cf8; /* Indigo 400 */
-    --primary-dark: #3730a3; /* Indigo 800 */
-    --secondary: #64748b; /* Slate 500 */
-    --success: #10b981; /* Emerald 500 */
-    --warning: #f59e0b; /* Amber 500 */
-    --danger: #ef4444; /* Red 500 */
+    --primary: #0f172a; /* Slate 900 - Deep, Trustworthy */
+    --primary-light: #334155; /* Slate 700 */
+    --accent: #0ea5e9; /* Sky 500 - Focused, Modern */
+    --accent-soft: #e0f2fe; /* Sky 50 */
+    --success: #059669; /* Emerald 600 */
+    --warning: #d97706; /* Amber 600 */
+    --danger: #dc2626; /* Red 600 */
     --background: #f8fafc; /* Slate 50 */
     --surface: #ffffff;
-    --text-main: #0f172a; /* Slate 900 */
-    --text-secondary: #475569; /* Slate 600 */
-    --text-muted: #94a3b8; /* Slate 400 */
+    --text-main: #334155; /* Slate 700 - Softer than black */
+    --text-strong: #0f172a; /* Slate 900 */
+    --text-muted: #64748b; /* Slate 500 */
     --border: #e2e8f0; /* Slate 200 */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    --radius: 0.75rem;
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --radius: 0.5rem;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -49,57 +48,50 @@ body {
 }
 
 .container {
-    max-width: 1280px;
+    max-width: 1100px; /* Slightly narrower for better reading focus */
     margin: 0 auto;
-    padding: 2rem;
+    padding: 3rem 2rem;
 }
 
-/* Header */
+/* Header - Minimalist & Editorial */
 .header {
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-    color: white;
-    padding: 4rem 3rem;
-    border-radius: 1.5rem;
+    background: transparent;
+    color: var(--text-strong);
+    padding: 0 0 2rem 0;
     margin-bottom: 3rem;
-    box-shadow: var(--shadow-lg);
+    border-bottom: 1px solid var(--border);
+    box-shadow: none;
+    border-radius: 0;
     position: relative;
-    overflow: hidden;
 }
 
-.header::before {
+.header::after {
     content: '';
     position: absolute;
-    top: 0;
+    bottom: -1px;
     left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at top right, rgba(255,255,255,0.1) 0%, transparent 60%);
-    pointer-events: none;
+    width: 60px;
+    height: 3px;
+    background: var(--accent);
 }
 
 .header h1 {
-    font-size: 3rem;
+    font-size: 2.5rem;
     font-weight: 800;
-    margin-bottom: 1rem;
-    letter-spacing: -0.025em;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    letter-spacing: -0.03em;
+    color: var(--primary);
+    margin-bottom: 0.75rem;
 }
 
 .header .meta {
     display: flex;
     gap: 2rem;
-    font-size: 0.95rem;
-    opacity: 0.9;
-    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
 }
 
-.header .meta span {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-/* Cards */
+/* Cards - Clean & Focused */
 .card {
     background: var(--surface);
     border-radius: var(--radius);
@@ -107,48 +99,44 @@ body {
     margin-bottom: 2rem;
     box-shadow: var(--shadow);
     border: 1px solid var(--border);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-    box-shadow: var(--shadow-lg);
 }
 
 .card h2 {
-    color: var(--text-main);
-    font-size: 1.5rem;
+    color: var(--primary);
+    font-size: 1.25rem;
     font-weight: 700;
     margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    letter-spacing: -0.01em;
 }
 
 .card h3 {
-    color: var(--text-secondary);
-    font-size: 1.1rem;
+    color: var(--text-strong);
+    font-size: 1rem;
     font-weight: 600;
     margin: 1.5rem 0 1rem;
 }
 
-/* Tables */
+/* Tables - Professional Data */
 .table-container {
     overflow-x: auto;
-    border-radius: var(--radius);
     border: 1px solid var(--border);
+    border-radius: var(--radius);
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.925rem;
+    font-size: 0.875rem;
 }
 
 th {
     background: var(--background);
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-weight: 600;
     text-transform: uppercase;
     font-size: 0.75rem;
@@ -161,29 +149,28 @@ th {
 td {
     padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--border);
-    color: var(--text-secondary);
+    color: var(--text-main);
     vertical-align: middle;
 }
 
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: var(--background); }
 
-/* Badges */
+/* Badges - Subtle & Trustworthy */
 .badge {
     display: inline-flex;
     align-items: center;
-    padding: 0.25rem 0.75rem;
+    padding: 0.125rem 0.625rem;
     border-radius: 9999px;
     font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
+    font-weight: 500;
+    border: 1px solid transparent;
 }
 
-.badge-essential { background: #dcfce7; color: #166534; }
-.badge-beneficial { background: #dbeafe; color: #1e40af; }
-.badge-tolerated { background: #fef3c7; color: #92400e; }
-.badge-detrimental { background: #fee2e2; color: #991b1b; }
+.badge-essential { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.badge-beneficial { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.badge-tolerated { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.badge-detrimental { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
 
 /* Stats Grid */
 .stats-grid {
@@ -194,25 +181,27 @@ tr:hover td { background: var(--background); }
 }
 
 .stat-card {
-    background: linear-gradient(145deg, var(--background), #fff);
+    background: var(--surface);
     padding: 1.5rem;
     border-radius: var(--radius);
     border: 1px solid var(--border);
-    text-align: center;
+    text-align: left; /* More professional alignment */
 }
 
 .stat-value {
-    font-size: 2.5rem;
-    font-weight: 800;
+    font-size: 2rem;
+    font-weight: 700;
     color: var(--primary);
     line-height: 1.2;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -0.05em;
 }
 
 .stat-label {
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-    font-weight: 500;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
@@ -220,7 +209,7 @@ tr:hover td { background: var(--background); }
 /* Molecule Grid */
 .mol-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 1.5rem;
     margin-top: 1.5rem;
 }
@@ -237,14 +226,13 @@ tr:hover td { background: var(--background); }
 }
 
 .mol-card:hover {
-    transform: translateY(-4px);
+    transform: translateY(-2px);
     box-shadow: var(--shadow);
-    border-color: var(--primary-light);
+    border-color: var(--accent);
 }
 
 .mol-svg {
     background: white;
-    border-radius: 0.5rem;
     padding: 0.5rem;
     margin-bottom: 0.75rem;
     display: flex;
@@ -253,64 +241,96 @@ tr:hover td { background: var(--background); }
 }
 
 .mol-id {
-    font-weight: 700;
-    color: var(--text-main);
-    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 .mol-activity {
-    color: var(--primary);
+    color: var(--accent);
     font-weight: 600;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     margin-top: 0.25rem;
-    background: #e0e7ff;
-    padding: 0.125rem 0.5rem;
-    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 /* R-Group Table Specifics */
 .rgroup-table .mol-cell { min-width: 180px; }
 .rgroup-table .rgroup-cell {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 0.8rem;
-    color: var(--text-main);
+    font-size: 0.75rem;
+    color: var(--text-strong);
     background: #f8fafc;
 }
 .rgroup-table .activity-cell {
-    font-weight: 700;
+    font-weight: 600;
     color: var(--primary);
+    font-family: 'JetBrains Mono', monospace;
 }
 
-/* Conclusion Box */
+/* Conclusion Box - Editorial Style */
 .conclusion {
-    background: linear-gradient(to right, #eff6ff, #f8fafc);
-    border-left: 4px solid var(--primary);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
     padding: 1.25rem 1.5rem;
     margin-top: 1.5rem;
-    border-radius: 0 0.5rem 0.5rem 0;
-    color: var(--text-main);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    color: var(--text-strong);
     font-size: 0.95rem;
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
+    line-height: 1.6;
 }
 
-.conclusion strong { color: var(--primary-dark); }
+.conclusion strong { color: var(--accent); }
 
 /* Footer */
 .footer {
     text-align: center;
     padding: 3rem 0;
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     border-top: 1px solid var(--border);
     margin-top: 4rem;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 /* Utilities */
 .text-center { text-align: center; }
 .text-right { text-align: right; }
-.font-mono { font-family: monospace; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* R-Group Legend */
+.rgroup-legend {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    border-radius: var(--radius);
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.rgroup-legend .core-scaffold {
+    background: white;
+    padding: 0.5rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.rgroup-legend .strategy-badge {
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
 """
 
 
@@ -418,10 +438,10 @@ def build_rgroup_decomposition_table_section(
     r_positions = sorted(all_r_positions)
     
     # Build HTML
-    html = '<div class="card"><h2>🧬 R-Group Decomposition Table</h2>'
+    html = '<div class="card"><h2>R-Group Decomposition Table</h2>'
     
     # Show scaffold legend with visualization and strategy reason
-    strategy_names = {"mcs": "MCS (Maximum Common Substructure)", "murcko": "Murcko Scaffold", "custom": "Custom Scaffold", "none": "None"}
+    strategy_names = {"mcs": "MCS", "murcko": "Murcko Scaffold", "custom": "Custom", "none": "None"}
     strategy_reasons = {
         "mcs": "Based on 80% threshold MCS detection.",
         "murcko": "Extracted Murcko scaffold (core ring system).",
@@ -457,9 +477,11 @@ def build_rgroup_decomposition_table_section(
         html += f'''
         <div class="rgroup-legend">
             <div style="flex:1">
-                <strong>🔬 Core Scaffold</strong>
-                <span class="strategy-badge">{strategy_names.get(scaffold_strategy, scaffold_strategy or "auto")}</span>
-                <div style="margin-top:0.5rem;font-size:0.875rem;opacity:0.9">💡 Reason: {reason}</div>
+                <div style="margin-bottom:0.5rem">
+                    <strong style="font-size:1.1rem;color:var(--primary)">Core Scaffold</strong>
+                    <span class="strategy-badge">{strategy_names.get(scaffold_strategy, scaffold_strategy or "auto")}</span>
+                </div>
+                <div style="font-size:0.875rem;color:var(--text-muted)">{reason}</div>
             </div>
             <div class="core-scaffold">
                 {scaffold_svg}
@@ -521,19 +543,63 @@ def build_rgroup_decomposition_table_section(
 
 def build_stats_section(sar_data: dict) -> str:
     """Build summary statistics section."""
-    stats = [("总化合物数", sar_data.get("total_compounds", 0))]
-
+    stats = []
+    
+    # 1. Basic Counts
+    total_compounds = sar_data.get("total_compounds", 0)
+    stats.append(("Total Compounds", total_compounds))
+    
+    # 2. Activity Statistics
+    compounds = sar_data.get("compounds", [])
+    activities = []
+    mols = []
+    
+    if compounds:
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors
+        
+        for c in compounds:
+            act = c.get("activity")
+            if act is not None:
+                try:
+                    activities.append(float(act))
+                except (ValueError, TypeError):
+                    pass
+            
+            smi = c.get("smiles")
+            if smi:
+                mol = Chem.MolFromSmiles(smi)
+                if mol:
+                    mols.append(mol)
+    
+    if activities:
+        stats.append(("Activity Range", f"{min(activities):.2f} - {max(activities):.2f}"))
+        stats.append(("Mean Activity", f"{sum(activities)/len(activities):.2f}"))
+    
+    # 3. Molecular Properties (MW, LogP)
+    if mols:
+        avg_mw = sum(Descriptors.MolWt(m) for m in mols) / len(mols)
+        avg_logp = sum(Descriptors.MolLogP(m) for m in mols) / len(mols)
+        stats.append(("Avg MW", f"{avg_mw:.1f}"))
+        stats.append(("Avg LogP", f"{avg_logp:.1f}"))
+        
+    # 4. Scaffold Info
+    scaffold_strategy = sar_data.get("scaffold_strategy")
+    if scaffold_strategy:
+        stats.append(("Scaffold Strategy", scaffold_strategy.upper()))
+        
+    # 5. Other Counts
     cliffs = sar_data.get("activity_cliffs", {})
     if cliffs.get("activity_cliffs_found"):
-        stats.append(("活性悬崖", cliffs["activity_cliffs_found"]))
+        stats.append(("Activity Cliffs", f"{cliffs['activity_cliffs_found']} pairs"))
 
     fg = sar_data.get("functional_group_sar", {})
     if fg.get("functional_group_sar"):
         essential = len([f for f in fg["functional_group_sar"] if f.get("effect") == "essential"])
         if essential > 0:
-            stats.append(("关键官能团", essential))
+            stats.append(("Essential Groups", essential))
 
-    html = '<div class="card"><h2>📈 Summary Statistics</h2><div class="stats-grid">'
+    html = '<div class="card"><h2>Summary Statistics</h2><div class="stats-grid">'
     for label, value in stats:
         html += f'''
         <div class="stat-card">
@@ -578,7 +644,7 @@ def build_compound_gallery_section(compounds: list[dict], max_display: int = 24)
         except Exception:
             return f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Error</text></svg>'
     
-    html = '<div class="card"><h2>🧬 Compound Gallery</h2>'
+    html = '<div class="card"><h2>Compound Gallery</h2>'
     html += f'<p style="margin-bottom:1.5rem;color:var(--text-secondary)">Total {len(compounds)} compounds'
     if len(compounds) > max_display:
         html += f', showing first {max_display}'
@@ -617,7 +683,7 @@ def build_rgroup_section(rgroup_data: dict) -> str:
     if not recommendations and not r_group_analysis:
         return ""
 
-    html = '<div class="card"><h2>🧪 R-Group SAR Analysis</h2>'
+    html = '<div class="card"><h2>R-Group SAR Analysis</h2>'
 
     # Activity range
     activity_range = rgroup_data.get("activity_range", {})
@@ -693,7 +759,7 @@ def build_functional_group_section(fg_data: dict) -> str:
     if not fg_list:
         return ""
 
-    html = '<div class="card"><h2>⚗️ Functional Group SAR</h2>'
+    html = '<div class="card"><h2>Functional Group SAR</h2>'
     html += '''
     <div class="table-container">
     <table>
@@ -745,7 +811,7 @@ def build_conformational_section(conf_data: dict) -> str:
     if not conf_data.get("planarity") and not conf_data.get("rigidity") and not conf_data.get("conclusions"):
         return ""
 
-    html = '<div class="card"><h2>🧬 Conformational SAR</h2>'
+    html = '<div class="card"><h2>Conformational SAR</h2>'
 
     if conf_data.get("planarity"):
         p = conf_data["planarity"]
@@ -810,7 +876,7 @@ def build_activity_cliffs_section(cliffs_data: dict) -> str:
         cliffs = cliffs_data.get("cliffs", [])
         count = cliffs_data.get("activity_cliffs_found", 0)
 
-    html = f'<div class="card"><h2>⚠️ Activity Cliffs</h2>'
+    html = f'<div class="card"><h2>Activity Cliffs</h2>'
     html += f'<p>Found <strong>{count}</strong> pairs of activity cliffs (Similarity &gt; 0.7, Activity Diff &gt; 10x)</p>'
 
     if cliffs:
@@ -887,7 +953,7 @@ def build_scaffold_section(scaffold_data: dict) -> str:
     if not scaffold_data or "error" in scaffold_data:
         return ""
 
-    html = '<div class="card"><h2>🔬 Scaffold SAR</h2>'
+    html = '<div class="card"><h2>Scaffold SAR</h2>'
 
     core = scaffold_data.get("core_scaffold", "N/A")
     essential = "Yes" if scaffold_data.get("scaffold_essential") else "No"
@@ -917,7 +983,7 @@ def build_positional_section(pos_data: dict) -> str:
     if not positions:
         return ""
 
-    html = '<div class="card"><h2>📍 Positional SAR</h2>'
+    html = '<div class="card"><h2>Positional SAR</h2>'
 
     for pos in positions:
         html += f'''
@@ -964,8 +1030,8 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
         <div class="header">
             <h1>{title}</h1>
             <div class="meta">
-                <span>📅 Generated: {timestamp}</span>
-                <span>🧪 Total Compounds: {total_compounds}</span>
+                <span>Generated: {timestamp}</span>
+                <span>Total Compounds: {total_compounds}</span>
             </div>
         </div>
 '''

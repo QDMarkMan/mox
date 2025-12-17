@@ -2,304 +2,196 @@
 **************************************************************************
 *  @Copyright [2025] Xtalpi Systems.
 *  @Author tongfu.e@xtalpi.com
-*  @Date [2025-12-12].
+*  @Date [2025-12-16].
 *  @Description Molx agent, the main agent orchestrator for molx-agent.
+*               Refactored to use ReAct pattern with LangGraph.
 **************************************************************************
 """
 
 import logging
 from typing import Optional
 
-from langgraph.graph import END, StateGraph
+from langchain_core.messages import SystemMessage, HumanMessage
+from langgraph.graph import END, StateGraph, START
+from langgraph.prebuilt import ToolNode, tools_condition
+from rich.console import Console
 
 from molx_agent.agents.base import BaseAgent
-from molx_agent.agents.data_cleaner import DataCleanerAgent
-from molx_agent.agents.modules.state import AgentState, Message
-from molx_agent.agents.planner import PlannerAgent
-from molx_agent.agents.reporter import ReporterAgent
-from molx_agent.agents.sar import SARAgent
-from molx_agent.agents.tool_agent import ToolAgent
+from molx_agent.agents.modules.state import AgentState
+from molx_agent.agents.modules.llm import get_llm
+from molx_agent.agents.react_tools import (
+    clean_data_tool,
+    sar_analysis_tool,
+    generate_report_tool,
+)
 
 logger = logging.getLogger(__name__)
+console = Console()
+
+SYSTEM_PROMPT = """You are MolX, an expert AI drug design assistant specializing in SAR (Structure-Activity Relationship) analysis.
+
+Your goal is to help users analyze chemical data, identify SAR trends, and generate reports.
+
+You have access to the following tools:
+1. `clean_data_tool`: Extract and clean chemical data from text or files. ALWAYS use this first to get data.
+2. `sar_analysis_tool`: Perform SAR analysis (R-group decomposition, etc.) on the cleaned data.
+3. `generate_report_tool`: Generate a comprehensive HTML report from the analysis results.
+
+**Workflow:**
+1.  **Understand the Goal**: Read the user's query.
+2.  **Get Data**: Use `clean_data_tool` to parse input data. This tool returns a file path to the cleaned data.
+3.  **Analyze**: Use `sar_analysis_tool` with the file path from step 2.
+4.  **Report**: Use `generate_report_tool` with the results from step 3 to create a final report.
+
+**Important:**
+- Always show your reasoning ("Thinking") before taking an action.
+- When calling `sar_analysis_tool`, prefer passing the `file_path` returned by `clean_data_tool` to avoid token limits.
+- If the user provides a file path, pass it to `clean_data_tool`.
+- If the user provides raw data in the prompt, pass it to `clean_data_tool`.
+"""
 
 
 class MolxAgent(BaseAgent):
-    """Main orchestrator agent that coordinates all sub-agents."""
+    """Main orchestrator agent using ReAct pattern."""
 
     def __init__(self) -> None:
         super().__init__(
             name="molx",
             description="Main orchestrator for SAR analysis workflow",
         )
-        self.planner = PlannerAgent()
-        self.data_cleaner = DataCleanerAgent()
-        self.tool_agent = ToolAgent()
-        self.sar_agent = SARAgent()
-        self.reporter = ReporterAgent()
-        self._graph = None
+        
+        # Define tools
+        self.tools = [clean_data_tool, sar_analysis_tool, generate_report_tool]
+        
+        # Initialize LLM with tools
+        self.llm = get_llm()
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
+        
+        # Build graph
+        self._build_graph()
 
-    def _pick_next_task(self, state: AgentState) -> Optional[str]:
-        """Pick the next executable task."""
-        tasks = state.get("tasks", {})
-        for tid, task in tasks.items():
-            if task.get("status") != "pending":
-                continue
-            depends_on = task.get("depends_on", [])
-            if all(tasks.get(dep, {}).get("status") == "done" for dep in depends_on):
-                return tid
-        return None
+    def _build_graph(self):
+        """Build the LangGraph state graph."""
+        workflow = StateGraph(AgentState)
 
-    def _route_after_planner(self, state: AgentState) -> str:
-        """Route to appropriate agent after planner."""
-        current_task_id = state.get("current_task_id")
+        # Define nodes
+        workflow.add_node("agent", self._call_model)
+        workflow.add_node("tools", ToolNode(self.tools))
 
-        if current_task_id is None:
-            return "reporter"
+        # Define edges
+        workflow.add_edge(START, "agent")
+        
+        # Conditional edge: agent -> tools OR end
+        workflow.add_conditional_edges(
+            "agent",
+            tools_condition,
+        )
+        
+        # Tools always go back to agent
+        workflow.add_edge("tools", "agent")
 
-        task = state.get("tasks", {}).get(current_task_id)
-        if not task:
-            return "reporter"
+        self._graph = workflow.compile()
 
-        task_type = task.get("type", "")
-
-        if task_type == "tool":
-            return "tool_agent"
-        elif task_type == "data_cleaner":
-            return "data_cleaner"
-        elif task_type == "sar":
-            return "sar_agent"
-        elif task_type == "reporter":
-            return "reporter"
+    def _call_model(self, state: AgentState) -> dict:
+        """Call the LLM and print thinking."""
+        messages = state["messages"]
+        
+        # Trim messages to avoid context length exceeded
+        # Keep System Prompt (first message) and last 10 messages
+        if len(messages) > 11:
+            trimmed_messages = [messages[0]] + messages[-10:]
         else:
-            # Unknown task type: mark as done and pick next
-            state["tasks"][current_task_id]["status"] = "done"
-            state["current_task_id"] = self._pick_next_task(state)
-            return self._route_after_planner(state)
-
-    def _route_after_worker(self, state: AgentState) -> str:
-        """Route after worker completion."""
-        state["current_task_id"] = self._pick_next_task(state)
-        return self._route_after_planner(state)
-
-    def _data_cleaner_node(self, state: AgentState) -> AgentState:
-        """Execute data cleaner and update task scheduling."""
-        state = self.data_cleaner.run(state)
-        state["current_task_id"] = self._pick_next_task(state)
-        return state
-
-    def _tool_agent_node(self, state: AgentState) -> AgentState:
-        """Execute tool agent and update task scheduling."""
-        state = self.tool_agent.run(state)
-        state["current_task_id"] = self._pick_next_task(state)
-        return state
-
-    def _sar_agent_node(self, state: AgentState) -> AgentState:
-        """Execute SAR agent and update task scheduling."""
-        state = self.sar_agent.run(state)
-        state["current_task_id"] = self._pick_next_task(state)
-        return state
-
-    def _build_graph(self) -> StateGraph:
-        """Build the LangGraph workflow."""
-        sg = StateGraph(AgentState)
-
-        # Add nodes
-        sg.add_node("planner", self.planner.run)
-        sg.add_node("tool_agent", self._tool_agent_node)
-        sg.add_node("data_cleaner", self._data_cleaner_node)
-        sg.add_node("sar_agent", self._sar_agent_node)
-        sg.add_node("reporter", self.reporter.run)
-
-        # Set entry point
-        sg.set_entry_point("planner")
-
-        # Route mapping for all workers
-        worker_routes = {
-            "tool_agent": "tool_agent",
-            "data_cleaner": "data_cleaner",
-            "sar_agent": "sar_agent",
-            "reporter": "reporter",
-        }
-
-        # Add conditional edges from planner
-        sg.add_conditional_edges("planner", self._route_after_planner, worker_routes)
-
-        # Add conditional edges from each worker
-        for worker in ["tool_agent", "data_cleaner", "sar_agent"]:
-            sg.add_conditional_edges(worker, self._route_after_worker, worker_routes)
-
-        # Reporter leads to END
-        sg.add_edge("reporter", END)
-
-        return sg.compile()
-
-    def get_graph(self) -> StateGraph:
-        """Get or create the graph instance."""
-        if self._graph is None:
-            self._graph = self._build_graph()
-        return self._graph
+            trimmed_messages = messages
+        
+        # Invoke LLM
+        response = self.llm_with_tools.invoke(trimmed_messages)
+        
+        # Print Thinking (content before tool calls)
+        if response.content:
+            console.print("\n[bold cyan]🧠 Thinking:[/]")
+            console.print(f"[cyan]{response.content}[/]\n")
+            
+        return {"messages": [response]}
 
     def run(self, state: AgentState) -> AgentState:
-        """Execute the full workflow.
-
+        """Execute the agent workflow.
+        
         Args:
-            state: Initial state with user_query.
-
+            state: Initial agent state.
+            
         Returns:
-            Final state with results.
+            Final agent state.
         """
-        graph = self.get_graph()
-        return graph.invoke(state)
+        # Initialize messages if empty
+        if not state.get("messages"):
+            state["messages"] = [
+                SystemMessage(content=SYSTEM_PROMPT),
+                HumanMessage(content=state.get("user_query", "")),
+            ]
+            
+        # Run the graph
+        # We need to stream events to show tool calls if desired, 
+        # but for now we just run invoke and let _call_model handle thinking print.
+        # ToolNode automatically logs tool calls if configured, but we can add custom logging if needed.
+        
+        final_state = self._graph.invoke(state)
+        return final_state
 
-    def analyze(self, query: str) -> tuple[str, dict]:
-        """Run SAR analysis with a user query.
 
-        Args:
-            query: The SAR analysis query from the user.
-
-        Returns:
-            A tuple of (text_report, structured_results).
-        """
-        initial_state: AgentState = {"user_query": query}
-        final_state = self.run(initial_state)
-
-        text_report = final_state.get("final_answer", "No report generated.")
-        structured = final_state.get("results", {}).get("final_structured", {})
-
-        return text_report, structured
-
-    def chat(self, message: str, history: list[Message] | None = None) -> tuple[str, list[Message]]:
-        """Run a chat turn with conversation history.
-
-        Args:
-            message: User message.
-            history: Optional previous conversation history.
-
-        Returns:
-            A tuple of (response, updated_history).
-        """
-        from rich.console import Console
-
-        from molx_agent.agents.intent_classifier import (
-            classify_intent,
-            get_intent_response,
-            is_supported_intent,
-        )
-
-        console = Console()
-
-        # Initialize history if not provided
-        if history is None:
-            history = []
-
-        # Add user message to history
-        history.append({"role": "user", "content": message})
-
-        # Classify user intent
-        console.print("[cyan]🤔 Classifying intent...[/]")
-        intent, confidence = classify_intent(message)
-        console.print(f"[dim]   Intent: {intent.value} ({confidence:.0%})[/]")
-
-        # Check if intent is supported
-        if not is_supported_intent(intent):
-            # Return friendly message for unsupported intents
-            response = get_intent_response(intent)
-            if response is None:
-                response = "抱歉，我不太理解您的需求。请尝试询问分子分析相关的问题。"
-
-            history.append({"role": "assistant", "content": response})
-            console.print("[yellow]⚠ Non-SAR intent detected, providing guidance[/]")
-            return response, history
-
-        # Build context from history for the planner
-        context = self._build_context(history)
-
-        # Run the agent with context
-        initial_state: AgentState = {
-            "user_query": context,
-            "messages": history,
-        }
-        final_state = self.run(initial_state)
-
-        # Get the response
-        response = final_state.get("final_answer", "I couldn't generate a response.")
-
-        # Add assistant response to history
-        history.append({"role": "assistant", "content": response})
-
-        return response, history
-
-    def _build_context(self, history: list[Message]) -> str:
-        """Build context string from conversation history.
-
-        Args:
-            history: Conversation history.
-
-        Returns:
-            Context string for the planner.
-        """
-        if len(history) <= 1:
-            # Only current message, no context needed
-            return history[-1]["content"] if history else ""
-
-        # Build context with recent history
-        context_parts = ["Previous conversation:"]
-        for msg in history[:-1]:  # All except current message
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            context_parts.append(f"- {role.upper()}: {content}")
-
-        context_parts.append(f"\nCurrent query: {history[-1]['content']}")
-        return "\n".join(context_parts)
+def run_sar_agent(user_query: str) -> dict:
+    """Run the SAR agent workflow.
+    
+    Args:
+        user_query: The user's query string.
+        
+    Returns:
+        Final agent state.
+    """
+    agent = MolxAgent()
+    state = AgentState(user_query=user_query)
+    final_state = agent.run(state)
+    return final_state
 
 
 class ChatSession:
-    """Interactive chat session with conversation history."""
+    """Interactive chat session wrapper for MolxAgent."""
+    
+    def __init__(self):
+        self.agent = MolxAgent()
+        self.state = AgentState(messages=[], tasks={}, results={})
 
-    def __init__(self, agent: MolxAgent | None = None) -> None:
-        """Initialize chat session.
+    def send(self, user_input: str) -> str:
+        """Send user input to the agent and get response."""
+        if not self.state.get("messages"):
+            # First turn
+            self.state["user_query"] = user_input
+        else:
+            # Subsequent turns
+            self.state["messages"].append(HumanMessage(content=user_input))
+            
+        self.state = self.agent.run(self.state)
+        
+        # Return last message content
+        messages = self.state["messages"]
+        if messages:
+            return messages[-1].content
+        return ""
 
-        Args:
-            agent: Optional MolxAgent instance. Creates new one if not provided.
-        """
-        self.agent = agent or MolxAgent()
-        self.history: list[Message] = []
-
-    def send(self, message: str) -> str:
-        """Send a message and get response.
-
-        Args:
-            message: User message.
-
-        Returns:
-            Agent response.
-        """
-        response, self.history = self.agent.chat(message, self.history)
-        return response
-
-    def get_history(self) -> list[Message]:
-        """Get conversation history.
-
-        Returns:
-            List of messages.
-        """
-        return self.history.copy()
-
-    def clear(self) -> None:
+    def clear(self):
         """Clear conversation history."""
-        self.history = []
+        self.state = AgentState(messages=[], tasks={}, results={})
 
-
-# Convenience function for backward compatibility
-def run_sar_agent(user_query: str) -> tuple[str, dict]:
-    """Run the SAR agent with a user query.
-
-    Args:
-        user_query: The SAR analysis query from the user.
-
-    Returns:
-        A tuple of (text_report, structured_results).
-    """
-    agent = MolxAgent()
-    return agent.analyze(user_query)
-
+    def get_history(self) -> list[dict]:
+        """Get conversation history."""
+        history = []
+        for msg in self.state.get("messages", []):
+            role = "user"
+            if msg.type == "ai":
+                role = "agent"
+            elif msg.type == "system":
+                role = "system"
+            elif msg.type == "human":
+                role = "user"
+            
+            history.append({"role": role, "content": msg.content})
+        return history

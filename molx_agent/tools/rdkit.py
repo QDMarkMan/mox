@@ -1,4 +1,12 @@
-"""RDKit-based chemistry tools."""
+"""
+**************************************************************************
+*  @Copyright [2025] Xtalpi Systems.
+*  @Author tongfu.e@xtalpi.com 
+*  @Date [2025-12-16 18:36:00].
+*  @Description RDKit base tool
+**************************************************************************
+"""
+
 
 from typing import Any, Optional
 
