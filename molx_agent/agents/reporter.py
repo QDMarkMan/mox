@@ -69,8 +69,19 @@ class ReporterAgent(BaseAgent):
 
             # Update state
             state["final_answer"] = self._build_summary(sar_results, report_path)
-            state["results"]["sar_analysis"] = sar_results
-            state["results"]["report_path"] = report_path
+            
+            tid = state.get("current_task_id")
+            if tid:
+                state["results"][tid] = {
+                    "sar_analysis": sar_results,
+                    "report_path": report_path,
+                    "html_path": report_path
+                }
+                if "tasks" in state and tid in state["tasks"]:
+                    state["tasks"][tid]["status"] = "done"
+            else:
+                state["results"]["sar_analysis"] = sar_results
+                state["results"]["report_path"] = report_path
 
             console.print(f"[green]✓ Reporter: Saved to {report_path}[/]")
 
