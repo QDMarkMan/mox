@@ -17,12 +17,10 @@ from molx_agent.agents.data_cleaner import (
     detect_input_type,
     extract_file_path,
     parse_json_data,
-    read_csv_file,
-    read_excel_file,
-    read_sdf_file,
     clean_compound_data,
     save_cleaned_data,
 )
+from molx_agent.tools.extractor import ExtractFromCSVTool, ExtractFromExcelTool, ExtractFromSDFTool
 from molx_agent.agents.sar import SARAgent
 from molx_agent.agents.reporter import ReporterAgent
 from molx_agent.tools.html_builder import build_sar_html_report, save_html_report
@@ -31,15 +29,15 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-def clean_data_tool(query: str, file_path: Optional[str] = None) -> dict[str, Any]:
-    """Extract, parse and clean molecular data from file or text.
+def clean_data_tool(query: str = "", file_path: str = "") -> dict[str, Any]:
+    """Clean and standardize molecular data from a file or query.
     
     Args:
-        query: User query string that might contain data or file path.
+        query: User query describing the data or file.
         file_path: Optional explicit file path.
         
     Returns:
-        Dictionary containing cleaned 'compounds' list and metadata.
+        Dictionary with cleaned data and file paths.
     """
     try:
         from rich.console import Console
@@ -47,6 +45,10 @@ def clean_data_tool(query: str, file_path: Optional[str] = None) -> dict[str, An
         console.print(f"[bold yellow]🛠️ Tool Call: clean_data_tool[/]")
         console.print(f"[dim]   Query: {query}[/]")
         console.print(f"[dim]   File Path: {file_path}[/]")
+        
+        # Get LLM for column identification
+        from molx_agent.agents.modules.llm import get_llm
+        llm = get_llm()
         
         content = file_path if file_path else query
         
@@ -64,11 +66,11 @@ def clean_data_tool(query: str, file_path: Optional[str] = None) -> dict[str, An
             
             ext = fpath.lower().split('.')[-1]
             if ext == 'csv':
-                data = read_csv_file(fpath)
+                data = ExtractFromCSVTool(llm=llm).invoke(fpath)
             elif ext in ['xlsx', 'xls']:
-                data = read_excel_file(fpath)
+                data = ExtractFromExcelTool(llm=llm).invoke(fpath)
             elif ext == 'sdf':
-                data = read_sdf_file(fpath)
+                data = ExtractFromSDFTool().invoke(fpath)
             else:
                 return {"error": f"Unsupported file type: {ext}"}
         else:
@@ -77,11 +79,11 @@ def clean_data_tool(query: str, file_path: Optional[str] = None) -> dict[str, An
             if fpath and os.path.exists(fpath):
                 ext = fpath.lower().split('.')[-1]
                 if ext == 'csv':
-                    data = read_csv_file(fpath)
+                    data = ExtractFromCSVTool(llm=llm).invoke(fpath)
                 elif ext in ['xlsx', 'xls']:
-                    data = read_excel_file(fpath)
-                elif ext == 'sdf':
-                    data = read_sdf_file(fpath)
+                    data = ExtractFromExcelTool(llm=llm).invoke(fpath)
+                elif ext in ['sdf', 'sd']:
+                    data = ExtractFromSDFTool().invoke(fpath)
                 else:
                     return {"error": f"Unsupported file type: {ext}"}
             else:

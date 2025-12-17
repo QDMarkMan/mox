@@ -58,6 +58,8 @@ def detect_input_type(content: str) -> str:
     return 'text'
 
 
+from molx_agent.tools.extractor import ExtractFromCSVTool, ExtractFromExcelTool, ExtractFromSDFTool
+
 def extract_file_path(text: str) -> Optional[str]:
     """Extract file path from text."""
     patterns = [
@@ -69,189 +71,6 @@ def extract_file_path(text: str) -> Optional[str]:
         if match:
             return match.group(1)
     return None
-
-
-def read_csv_file(file_path: str) -> dict:
-    """Read molecular data from CSV file.
-
-    Args:
-        file_path: Path to CSV file.
-
-    Returns:
-        Extracted data dictionary.
-    """
-    import pandas as pd
-
-    df = pd.read_csv(file_path)
-    return _extract_from_dataframe(df, file_path)
-
-
-def read_excel_file(file_path: str) -> dict:
-    """Read molecular data from Excel file.
-
-    Args:
-        file_path: Path to Excel file.
-
-    Returns:
-        Extracted data dictionary.
-    """
-    import pandas as pd
-
-    df = pd.read_excel(file_path)
-    return _extract_from_dataframe(df, file_path)
-
-
-def read_sdf_file(file_path: str) -> dict:
-    """Read molecular data from SDF file.
-
-    Args:
-        file_path: Path to SDF file.
-
-    Returns:
-        Extracted data dictionary.
-    """
-    from rdkit import Chem
-
-    compounds = []
-    suppl = Chem.SDMolSupplier(file_path)
-
-    for mol in suppl:
-        if mol is None:
-            continue
-
-        smiles = Chem.MolToSmiles(mol)
-        props = mol.GetPropsAsDict()
-
-        # Find activity property
-        activity = None
-        for key in props:
-            key_lower = key.lower()
-            if any(kw in key_lower for kw in ['activity', 'ic50', 'ic90', 'ec50', 'ki']):
-                try:
-                    activity = float(props[key])
-                except (ValueError, TypeError):
-                    pass
-                break
-
-        compound = {
-            "smiles": smiles,
-            "activity": activity,
-            "properties": props,
-        }
-
-        # Extract compound name/ID
-        name = mol.GetProp("_Name") if mol.HasProp("_Name") else None
-        if name:
-            compound["compound_id"] = name
-
-        compounds.append(compound)
-
-    return {
-        "compounds": compounds,
-        "source_file": file_path,
-        "file_type": "sdf",
-        "total_molecules": len(compounds),
-    }
-
-
-def _extract_from_dataframe(df, file_path: str) -> dict:
-    """Extract molecular data from pandas DataFrame.
-
-    Args:
-        df: Pandas DataFrame.
-        file_path: Source file path.
-
-    Returns:
-        Extracted data dictionary.
-    """
-    # Column mapping strategies
-    smiles_keywords = ['smiles', 'smi', 'structure', 'canonical_smiles', 'mol']
-    activity_keywords = ['ic50', 'ic90', 'ec50', 'ki', 'kd', 'activity', 'potency']
-    id_keywords = ['compound', 'id', 'name', 'number', 'cpd', 'mol_id']
-
-    # Find columns
-    smiles_col = None
-    activity_col = None
-    id_col = None
-
-    for col in df.columns:
-        col_lower = col.lower()
-        if smiles_col is None and any(kw in col_lower for kw in smiles_keywords):
-            smiles_col = col
-        if activity_col is None and any(kw in col_lower for kw in activity_keywords):
-            activity_col = col
-        if id_col is None and any(kw in col_lower for kw in id_keywords):
-            id_col = col
-
-    compounds = []
-    for idx, row in df.iterrows():
-        # Get SMILES
-        smiles = row.get(smiles_col) if smiles_col else None
-        if smiles is None or (isinstance(smiles, float) and smiles != smiles):  # NaN check
-            continue
-        smiles = str(smiles).strip()
-        if not smiles:
-            continue
-
-        # Get activity  
-        activity = None
-        if activity_col:
-            act_val = row.get(activity_col)
-            if act_val is not None and act_val == act_val:  # NaN check
-                try:
-                    activity = float(act_val)
-                except (ValueError, TypeError):
-                    pass
-
-        # Get compound ID
-        compound_id = row.get(id_col) if id_col else f"cpd_{idx}"
-        if compound_id is None or (isinstance(compound_id, float) and compound_id != compound_id):
-            compound_id = f"cpd_{idx}"
-
-        compound = {
-            "compound_id": str(compound_id),
-            "smiles": smiles,
-            "activity": activity,
-        }
-
-        # Add all other columns as properties
-        other_props = {}
-        for col in df.columns:
-            if col not in [smiles_col, activity_col, id_col]:
-                val = row.get(col)
-                if val is not None and val == val:  # NaN check
-                    other_props[col] = val
-        if other_props:
-            compound["properties"] = other_props
-
-        compounds.append(compound)
-
-    return {
-        "compounds": compounds,
-        "source_file": file_path,
-        "file_type": file_path.split('.')[-1].lower(),
-        "total_molecules": len(compounds),
-        "columns": {
-            "smiles": smiles_col,
-            "activity": activity_col,
-            "id": id_col,
-        },
-        "activity_stats": _calculate_activity_stats([c.get("activity") for c in compounds]),
-    }
-
-
-def _calculate_activity_stats(activities: list) -> dict:
-    """Calculate activity statistics."""
-    valid = [a for a in activities if a is not None]
-    if not valid:
-        return {"valid_count": 0}
-
-    return {
-        "valid_count": len(valid),
-        "min": round(min(valid), 4),
-        "max": round(max(valid), 4),
-        "mean": round(sum(valid) / len(valid), 4),
-    }
 
 
 def parse_json_data(json_str: str) -> dict:
@@ -333,6 +152,9 @@ def clean_compound_data(compounds: list[dict]) -> list[dict]:
             "activity": cpd.get("activity"),
             "compound_id": cpd.get("compound_id", ""),
         }
+        
+        if "activities" in cpd:
+            cleaned_cpd["activities"] = cpd["activities"]
 
         # Copy other properties
         if "properties" in cpd:
@@ -458,6 +280,11 @@ class DataCleanerAgent(BaseAgent):
                         # Fall back to description or user_query
                         content = description or user_query
 
+            # Instantiate tools
+            csv_tool = ExtractFromCSVTool(llm=self.llm)
+            excel_tool = ExtractFromExcelTool(llm=self.llm)
+            sdf_tool = ExtractFromSDFTool()
+
             # Step 1: Detect input type
             input_type = detect_input_type(content)
             console.print(f"[dim]   Input type: {input_type}[/]")
@@ -476,11 +303,11 @@ class DataCleanerAgent(BaseAgent):
 
                 ext = file_path.lower().split('.')[-1]
                 if ext == 'csv':
-                    data = read_csv_file(file_path)
+                    data = csv_tool.invoke(file_path)
                 elif ext in ['xlsx', 'xls']:
-                    data = read_excel_file(file_path)
+                    data = excel_tool.invoke(file_path)
                 elif ext == 'sdf':
-                    data = read_sdf_file(file_path)
+                    data = sdf_tool.invoke(file_path)
                 else:
                     raise ValueError(f"Unsupported file type: {ext}")
 
@@ -491,11 +318,11 @@ class DataCleanerAgent(BaseAgent):
                     console.print(f"[dim]   Found file in text: {file_path}[/]")
                     ext = file_path.lower().split('.')[-1]
                     if ext == 'csv':
-                        data = read_csv_file(file_path)
+                        data = csv_tool.invoke(file_path)
                     elif ext in ['xlsx', 'xls']:
-                        data = read_excel_file(file_path)
+                        data = excel_tool.invoke(file_path)
                     elif ext == 'sdf':
-                        data = read_sdf_file(file_path)
+                        data = sdf_tool.invoke(file_path)
                     else:
                         raise ValueError(f"Unsupported file type: {ext}")
                 else:
