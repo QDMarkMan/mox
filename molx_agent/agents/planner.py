@@ -2,13 +2,15 @@
 **************************************************************************
 *  @Copyright [2025] Xtalpi Systems.
 *  @Author tongfu.e@xtalpi.com
-*  @Date [2025-12-12].
-*  @Description Planner agent, plan the analysis process.
+*  @Date [2025-12-17].
+*  @Description PlannerAgent with ReAct pattern support.
+*               Implements: Think → Act → Reflect → Optimize
 **************************************************************************
 """
 
+import json
 import logging
-from typing import Optional
+from typing import Optional, Any
 
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.llm import invoke_llm
@@ -16,102 +18,289 @@ from molx_agent.agents.modules.state import AgentState, Task
 
 logger = logging.getLogger(__name__)
 
-PLANNER_SYSTEM_PROMPT = """
-You are the Planner of a multi-agent SAR (Structure-Activity Relationship)
-analysis system.
 
-Your role is to:
-1. Understand the user's drug design query
-2. Decompose it into a DAG (Directed Acyclic Graph) of subtasks
-3. Assign each subtask to the appropriate worker type
+# =============================================================================
+# System Prompts
+# =============================================================================
 
-Available worker types:
-- "tool": Use chemistry tools (SMILES conversion, MW, similarity, safety)
-- "data_cleaner": Data file preprocessing and cleaning
-- "sar": SAR analysis (R-group decomposition, OCAT analysis, scaffold selection)
-- "reporter": Report generation and summarization
+PLANNER_SYSTEM_PROMPT = """You are the Planner of a multi-agent SAR (Structure-Activity Relationship) analysis system.
 
-For each task, specify:
-- id: Unique task identifier (e.g., "task_1", "analyze_mol")
-- type: One of "tool", "data_cleaner", "sar", "reporter"
-- description: What this task should accomplish
-- inputs: Required input data
-- expected_outputs: List of expected output keys
-- depends_on: List of task IDs that must complete before this task
+Your role is to analyze user queries and create a plan of tasks (DAG).
 
-Return ONLY a valid JSON object with this structure:
+## Available Workers:
+- "data_cleaner": Extract and clean molecular data from files (CSV, Excel, SDF)
+- "sar": SAR analysis (R-group decomposition, scaffold selection)
+- "reporter": Generate HTML reports
+
+## Task Format:
+Return a JSON object with this structure:
 {
+  "reasoning": "Your step-by-step thinking about how to approach this query",
   "tasks": [
     {
       "id": "task_id",
-      "type": "tool|data_cleaner|sar|reporter",
-      "description": "Task description",
+      "type": "data_cleaner|sar|reporter",
+      "description": "What this task should accomplish",
       "inputs": {},
-      "expected_outputs": ["output1"],
+      "expected_outputs": ["output_key"],
       "depends_on": []
     }
   ]
 }
 
-Keep the task graph simple. For MVP, prefer 2-4 tasks maximum.
-For SAR analysis queries, typical flow is: data_cleaner -> sar -> reporter
+## Guidelines:
+- Keep plans simple (2-4 tasks maximum)
+- Typical SAR flow: data_cleaner → sar → reporter
+- Each task should have clear inputs and expected outputs
+- Dependencies define execution order
+"""
+
+REFLECT_SYSTEM_PROMPT = """You are evaluating the results of executed tasks.
+
+Given the original query, the planned tasks, and their results, assess:
+1. Did all tasks complete successfully?
+2. Were the expected outputs produced?
+3. Is the quality of results satisfactory?
+4. Should any tasks be retried or replanned?
+
+Return a JSON object:
+{
+  "success": true/false,
+  "summary": "Brief summary of what was accomplished",
+  "issues": ["list of any issues found"],
+  "should_replan": true/false,
+  "replan_reason": "If should_replan is true, explain why"
+}
+"""
+
+OPTIMIZE_SYSTEM_PROMPT = """You are optimizing a failed or incomplete plan.
+
+Given the original query, previous plan, and the issues encountered, create an improved plan.
+
+Consider:
+- What went wrong in the previous attempt?
+- How can the tasks be restructured?
+- Are there alternative approaches?
+
+Return a JSON object with the same format as the original plan:
+{
+  "reasoning": "Your revised thinking",
+  "tasks": [...]
+}
 """
 
 
 class PlannerAgent(BaseAgent):
-    """Planner agent that decomposes user queries into task DAGs."""
+    """Planner agent implementing ReAct pattern.
+    
+    Phases:
+    - THINK: Analyze query and create task plan
+    - ACT: (Handled by MolxAgent dispatching to workers)
+    - REFLECT: Evaluate results and check for issues
+    - OPTIMIZE: Replan if needed
+    """
+
+    MAX_ITERATIONS = 3  # Prevent infinite loops
 
     def __init__(self) -> None:
         super().__init__(
             name="planner",
-            description="Plans and decomposes user queries into executable tasks",
+            description="Plans and orchestrates SAR analysis using ReAct pattern",
         )
 
-    def run(self, state: AgentState) -> AgentState:
-        """Plan tasks based on user query.
-
+    def think(self, state: AgentState) -> AgentState:
+        """THINK phase: Analyze query and create task plan.
+        
         Args:
             state: Current agent state with user_query.
-
+            
         Returns:
             Updated state with tasks DAG.
         """
         from rich.console import Console
-
         console = Console()
+        
         user_query = state.get("user_query", "")
-
-        console.print("[cyan]🔍 Planner: Analyzing query...[/]")
+        console.print("\n[bold cyan]🧠 THINK: Analyzing query and creating plan...[/]")
 
         try:
-            user_message = (
-                f"User query:\n{user_query}\n\nReturn only the JSON DAG of tasks."
-            )
-            dag = invoke_llm(PLANNER_SYSTEM_PROMPT, user_message, parse_json=True)
+            user_message = f"User query:\n{user_query}\n\nCreate a task plan."
+            result = invoke_llm(PLANNER_SYSTEM_PROMPT, user_message, parse_json=True)
 
-            console.print("[green]✓ Planner: Received response[/]")
+            # Show reasoning
+            reasoning = result.get("reasoning", "")
+            if reasoning:
+                console.print(f"[dim]   Reasoning: {reasoning[:200]}...[/]" if len(reasoning) > 200 else f"[dim]   Reasoning: {reasoning}[/]")
 
+            # Parse tasks
             tasks: dict[str, Task] = {}
-            for t in dag.get("tasks", []):
+            for t in result.get("tasks", []):
                 t["status"] = "pending"
                 tasks[t["id"]] = t
-                console.print(f"  • Task: [bold]{t['id']}[/] ({t['type']})")
+                console.print(f"   • Task: [bold]{t['id']}[/] ({t['type']}) - {t['description'][:50]}...")
 
             state["tasks"] = tasks
-            state["results"] = {}
+            state["results"] = state.get("results", {})
             state["current_task_id"] = self._pick_next_task(state)
+            state["iteration"] = state.get("iteration", 0) + 1
 
-            console.print(f"[green]✓ Planner: Created {len(tasks)} tasks[/]")
+            console.print(f"[green]✓ THINK: Created {len(tasks)} tasks (iteration {state['iteration']})[/]")
             logger.info(f"Planner created {len(tasks)} tasks")
 
         except Exception as e:
-            console.print(f"[red]✗ Planner error: {e}[/]")
-            logger.error(f"Planner error: {e}")
+            console.print(f"[red]✗ THINK error: {e}[/]")
+            logger.error(f"Planner THINK error: {e}")
             state["error"] = f"Planner error: {e}"
             state["tasks"] = {}
             state["current_task_id"] = None
 
         return state
+
+    def reflect(self, state: AgentState) -> AgentState:
+        """REFLECT phase: Evaluate execution results.
+        
+        Args:
+            state: State with executed task results.
+            
+        Returns:
+            Updated state with reflection.
+        """
+        from rich.console import Console
+        console = Console()
+        
+        console.print("\n[bold yellow]🔍 REFLECT: Evaluating results...[/]")
+
+        try:
+            # Prepare context for reflection
+            user_query = state.get("user_query", "")
+            tasks = state.get("tasks", {})
+            results = state.get("results", {})
+            
+            # Build summary of what happened
+            context = f"""
+Original Query: {user_query}
+
+Planned Tasks:
+{json.dumps(list(tasks.values()), indent=2, default=str)[:2000]}
+
+Task Results:
+{json.dumps(results, indent=2, default=str)[:2000]}
+"""
+            
+            result = invoke_llm(REFLECT_SYSTEM_PROMPT, context, parse_json=True)
+            
+            success = result.get("success", False)
+            summary = result.get("summary", "")
+            issues = result.get("issues", [])
+            should_replan = result.get("should_replan", False)
+            
+            # Store reflection
+            state["reflection"] = {
+                "success": success,
+                "summary": summary,
+                "issues": issues,
+                "should_replan": should_replan,
+                "replan_reason": result.get("replan_reason", "")
+            }
+            
+            if success:
+                console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
+            else:
+                console.print(f"[yellow]⚠ REFLECT: Issues found - {', '.join(issues)}[/]")
+                
+            if should_replan:
+                console.print(f"[yellow]   → Will attempt to optimize plan[/]")
+
+        except Exception as e:
+            console.print(f"[red]✗ REFLECT error: {e}[/]")
+            logger.error(f"Planner REFLECT error: {e}")
+            state["reflection"] = {"success": False, "issues": [str(e)], "should_replan": False}
+
+        return state
+
+    def optimize(self, state: AgentState) -> AgentState:
+        """OPTIMIZE phase: Replan if needed.
+        
+        Args:
+            state: State with reflection indicating issues.
+            
+        Returns:
+            Updated state with new plan or same state if optimization not needed.
+        """
+        from rich.console import Console
+        console = Console()
+        
+        reflection = state.get("reflection", {})
+        if not reflection.get("should_replan", False):
+            return state
+            
+        iteration = state.get("iteration", 0)
+        if iteration >= self.MAX_ITERATIONS:
+            console.print(f"[red]✗ OPTIMIZE: Max iterations ({self.MAX_ITERATIONS}) reached, stopping[/]")
+            return state
+            
+        console.print("\n[bold magenta]🔧 OPTIMIZE: Replanning...[/]")
+
+        try:
+            user_query = state.get("user_query", "")
+            tasks = state.get("tasks", {})
+            issues = reflection.get("issues", [])
+            reason = reflection.get("replan_reason", "")
+            
+            context = f"""
+Original Query: {user_query}
+
+Previous Plan:
+{json.dumps(list(tasks.values()), indent=2, default=str)[:1500]}
+
+Issues Encountered:
+{json.dumps(issues, indent=2)}
+
+Reason for Replanning: {reason}
+
+Create an improved plan that addresses these issues.
+"""
+            
+            result = invoke_llm(OPTIMIZE_SYSTEM_PROMPT, context, parse_json=True)
+            
+            # Parse new tasks
+            new_tasks: dict[str, Task] = {}
+            for t in result.get("tasks", []):
+                t["status"] = "pending"
+                new_tasks[t["id"]] = t
+                
+            if new_tasks:
+                state["tasks"] = new_tasks
+                state["current_task_id"] = self._pick_next_task(state)
+                console.print(f"[green]✓ OPTIMIZE: Created new plan with {len(new_tasks)} tasks[/]")
+            else:
+                console.print("[yellow]⚠ OPTIMIZE: No new tasks generated[/]")
+
+        except Exception as e:
+            console.print(f"[red]✗ OPTIMIZE error: {e}[/]")
+            logger.error(f"Planner OPTIMIZE error: {e}")
+
+        return state
+
+    def should_continue(self, state: AgentState) -> bool:
+        """Check if ReAct loop should continue.
+        
+        Returns True if:
+        - There are pending tasks, OR
+        - Reflection says should_replan AND iteration < MAX
+        """
+        # Check for pending tasks
+        tasks = state.get("tasks", {})
+        has_pending = any(t.get("status") == "pending" for t in tasks.values())
+        if has_pending:
+            return True
+            
+        # Check if should replan
+        reflection = state.get("reflection", {})
+        should_replan = reflection.get("should_replan", False)
+        iteration = state.get("iteration", 0)
+        
+        return should_replan and iteration < self.MAX_ITERATIONS
 
     def _pick_next_task(self, state: AgentState) -> Optional[str]:
         """Pick the next executable task."""
@@ -123,3 +312,7 @@ class PlannerAgent(BaseAgent):
             if all(tasks.get(dep, {}).get("status") == "done" for dep in depends_on):
                 return tid
         return None
+
+    def run(self, state: AgentState) -> AgentState:
+        """Run the planner (THINK phase only for backward compatibility)."""
+        return self.think(state)

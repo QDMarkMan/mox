@@ -2,140 +2,227 @@
 **************************************************************************
 *  @Copyright [2025] Xtalpi Systems.
 *  @Author tongfu.e@xtalpi.com
-*  @Date [2025-12-16].
-*  @Description Molx agent, the main agent orchestrator for molx-agent.
-*               Refactored to use ReAct pattern with LangGraph.
+*  @Date [2025-12-17].
+*  @Description MolxAgent - Main orchestrator using ReAct pattern.
+*               Integrates PlannerAgent for Think/Reflect/Optimize.
 **************************************************************************
 """
 
 import logging
 from typing import Optional
 
-from langchain_core.messages import SystemMessage, HumanMessage
-from langgraph.graph import END, StateGraph, START
-from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from rich.console import Console
 
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.state import AgentState
-from molx_agent.agents.modules.llm import get_llm
-from molx_agent.agents.react_tools import (
-    clean_data_tool,
-    sar_analysis_tool,
-    generate_report_tool,
-)
+from molx_agent.agents.planner import PlannerAgent
+from molx_agent.agents.data_cleaner import DataCleanerAgent
+from molx_agent.agents.sar import SARAgent
+from molx_agent.agents.reporter import ReporterAgent
+from molx_agent.agents.intent_classifier import IntentClassifierAgent, Intent
 
 logger = logging.getLogger(__name__)
 console = Console()
 
-SYSTEM_PROMPT = """You are MolX, an expert AI drug design assistant specializing in SAR (Structure-Activity Relationship) analysis.
-
-Your goal is to help users analyze chemical data, identify SAR trends, and generate reports.
-
-You have access to the following tools:
-1. `clean_data_tool`: Extract and clean chemical data from text or files. ALWAYS use this first to get data.
-2. `sar_analysis_tool`: Perform SAR analysis (R-group decomposition, etc.) on the cleaned data.
-3. `generate_report_tool`: Generate a comprehensive HTML report from the analysis results.
-
-**Workflow:**
-1.  **Understand the Goal**: Read the user's query.
-2.  **Get Data**: Use `clean_data_tool` to parse input data. This tool returns a file path to the cleaned data.
-3.  **Analyze**: Use `sar_analysis_tool` with the file path from step 2.
-4.  **Report**: Use `generate_report_tool` with the results from step 3 to create a final report.
-
-**Important:**
-- Always show your reasoning ("Thinking") before taking an action.
-- When calling `sar_analysis_tool`, prefer passing the `file_path` returned by `clean_data_tool` to avoid token limits.
-- If the user provides a file path, pass it to `clean_data_tool`.
-- If the user provides raw data in the prompt, pass it to `clean_data_tool`.
-"""
-
 
 class MolxAgent(BaseAgent):
-    """Main orchestrator agent using ReAct pattern."""
+    """Main orchestrator agent using ReAct pattern.
+    
+    ReAct Loop:
+    1. CLASSIFY: IntentClassifierAgent determines query type
+    2. THINK: PlannerAgent creates task DAG
+    3. ACT: Execute tasks via worker agents
+    4. REFLECT: PlannerAgent evaluates results
+    5. OPTIMIZE: Replan if needed (loop back to THINK)
+    """
 
     def __init__(self) -> None:
         super().__init__(
             name="molx",
-            description="Main orchestrator for SAR analysis workflow",
+            description="Main orchestrator for SAR analysis using ReAct pattern",
         )
         
-        # Define tools
-        self.tools = [clean_data_tool, sar_analysis_tool, generate_report_tool]
-        
-        # Initialize LLM with tools
-        self.llm = get_llm()
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
-        
-        # Build graph
-        self._build_graph()
-
-    def _build_graph(self):
-        """Build the LangGraph state graph."""
-        workflow = StateGraph(AgentState)
-
-        # Define nodes
-        workflow.add_node("agent", self._call_model)
-        workflow.add_node("tools", ToolNode(self.tools))
-
-        # Define edges
-        workflow.add_edge(START, "agent")
-        
-        # Conditional edge: agent -> tools OR end
-        workflow.add_conditional_edges(
-            "agent",
-            tools_condition,
-        )
-        
-        # Tools always go back to agent
-        workflow.add_edge("tools", "agent")
-
-        self._graph = workflow.compile()
-
-    def _call_model(self, state: AgentState) -> dict:
-        """Call the LLM and print thinking."""
-        messages = state["messages"]
-        
-        # Trim messages to avoid context length exceeded
-        # Keep System Prompt (first message) and last 10 messages
-        if len(messages) > 11:
-            trimmed_messages = [messages[0]] + messages[-10:]
-        else:
-            trimmed_messages = messages
-        
-        # Invoke LLM
-        response = self.llm_with_tools.invoke(trimmed_messages)
-        
-        # Print Thinking (content before tool calls)
-        if response.content:
-            console.print("\n[bold cyan]🧠 Thinking:[/]")
-            console.print(f"[cyan]{response.content}[/]\n")
-            
-        return {"messages": [response]}
+        # Initialize sub-agents
+        self.intent_classifier = IntentClassifierAgent()
+        self.planner = PlannerAgent()
+        self.workers = {
+            "data_cleaner": DataCleanerAgent(),
+            "sar": SARAgent(),
+            "reporter": ReporterAgent(),
+        }
 
     def run(self, state: AgentState) -> AgentState:
-        """Execute the agent workflow.
+        """Execute the ReAct workflow.
         
         Args:
-            state: Initial agent state.
+            state: Initial agent state with user_query.
             
         Returns:
-            Final agent state.
+            Final agent state with results.
         """
-        # Initialize messages if empty
-        if not state.get("messages"):
-            state["messages"] = [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=state.get("user_query", "")),
-            ]
-            
-        # Run the graph
-        # We need to stream events to show tool calls if desired, 
-        # but for now we just run invoke and let _call_model handle thinking print.
-        # ToolNode automatically logs tool calls if configured, but we can add custom logging if needed.
+        console.print("\n[bold blue]═════════════════════════════[/]")
+        console.print("[bold blue]       🧪 MolX Agent       [/]")
+        console.print("[bold blue]═════════════════════════════[/]\n")
         
-        final_state = self._graph.invoke(state)
-        return final_state
+        user_query = state.get("user_query", "")
+        
+        # Step 0: Classify intent using IntentClassifierAgent
+        state = self.intent_classifier.run(state)
+        
+        intent = state.get("intent", Intent.SAR_ANALYSIS)
+        
+        if not self.intent_classifier.is_supported(intent):
+            response = self.intent_classifier.get_response(intent)
+            state["final_response"] = response
+            state["messages"] = state.get("messages", []) + [AIMessage(content=response)]
+            return state
+        
+        # Initialize state
+        state["iteration"] = 0
+        state["tasks"] = {}
+        state["results"] = {}
+        
+        # ReAct Loop
+        while True:
+            # THINK: Create/update plan
+            state = self.planner.think(state)
+            
+            if state.get("error"):
+                console.print(f"[red]Planning failed: {state['error']}[/]")
+                break
+            
+            # ACT: Execute all pending tasks
+            state = self._execute_tasks(state)
+            
+            # REFLECT: Evaluate results
+            state = self.planner.reflect(state)
+            
+            # Check if should continue (OPTIMIZE or stop)
+            if not self.planner.should_continue(state):
+                break
+                
+            # OPTIMIZE: Replan if needed
+            state = self.planner.optimize(state)
+        
+        # Generate final response
+        state = self._generate_final_response(state)
+        
+        console.print("\n[bold blue]═══════════════════════════════════════════[/]")
+        console.print("[bold blue]              ✅ Task Complete          [/]")
+        console.print("[bold blue]═══════════════════════════════════════════[/]\n")
+        
+        return state
+
+    def _execute_tasks(self, state: AgentState) -> AgentState:
+        """Execute pending tasks via worker agents.
+        
+        Args:
+            state: State with tasks to execute.
+            
+        Returns:
+            Updated state with results.
+        """
+        console.print("\n[bold green]⚡ ACT: Executing tasks...[/]")
+        
+        tasks = state.get("tasks", {})
+        
+        while True:
+            # Find next executable task
+            task_id = state.get("current_task_id")
+            if not task_id:
+                task_id = self.planner._pick_next_task(state)
+                
+            if not task_id:
+                break  # No more tasks to execute
+                
+            task = tasks.get(task_id)
+            if not task:
+                break
+                
+            task_type = task.get("type", "")
+            console.print(f"\n   [cyan]→ Executing: {task_id} ({task_type})[/]")
+            
+            # Get worker agent
+            worker = self.workers.get(task_type)
+            if not worker:
+                console.print(f"   [red]Unknown worker type: {task_type}[/]")
+                task["status"] = "error"
+                state["results"][task_id] = {"error": f"Unknown worker: {task_type}"}
+                state["current_task_id"] = None
+                continue
+            
+            # Inject inputs from previous results
+            self._inject_task_inputs(state, task)
+            
+            # Execute worker
+            try:
+                state["current_task_id"] = task_id
+                state = worker.run(state)
+                
+                # Check result
+                result = state.get("results", {}).get(task_id, {})
+                if result.get("error"):
+                    task["status"] = "error"
+                    console.print(f"   [red]✗ Task {task_id} failed: {result['error']}[/]")
+                else:
+                    task["status"] = "done"
+                    console.print(f"   [green]✓ Task {task_id} completed[/]")
+                    
+            except Exception as e:
+                task["status"] = "error"
+                state["results"][task_id] = {"error": str(e)}
+                console.print(f"   [red]✗ Task {task_id} exception: {e}[/]")
+                logger.error(f"Task {task_id} failed: {e}")
+            
+            state["current_task_id"] = None
+            
+        return state
+
+    def _inject_task_inputs(self, state: AgentState, task: dict) -> None:
+        """Inject outputs from previous tasks as inputs to current task."""
+        results = state.get("results", {})
+        depends_on = task.get("depends_on", [])
+        
+        for dep_id in depends_on:
+            dep_result = results.get(dep_id, {})
+            if dep_result:
+                # Merge dependency outputs into task inputs
+                if "inputs" not in task:
+                    task["inputs"] = {}
+                task["inputs"][f"{dep_id}_output"] = dep_result
+
+    def _generate_final_response(self, state: AgentState) -> AgentState:
+        """Generate final response based on results."""
+        results = state.get("results", {})
+        reflection = state.get("reflection", {})
+        
+        # Find report path if available
+        report_path = None
+        for tid, result in results.items():
+            if isinstance(result, dict):
+                # Check for report output
+                output_files = result.get("output_files", {})
+                if "html" in output_files:
+                    report_path = output_files["html"]
+                    break
+                # Check for direct path
+                if result.get("report_path"):
+                    report_path = result["report_path"]
+                    break
+        
+        # Build response
+        summary = reflection.get("summary", "Analysis complete.")
+        
+        if report_path:
+            response = f"✅ {summary}\n\n📊 Report generated: {report_path}"
+        else:
+            response = f"✅ {summary}"
+            
+        state["final_response"] = response
+        state["messages"] = state.get("messages", []) + [AIMessage(content=response)]
+        
+        return state
 
 
 def run_sar_agent(user_query: str) -> dict:
@@ -148,7 +235,7 @@ def run_sar_agent(user_query: str) -> dict:
         Final agent state.
     """
     agent = MolxAgent()
-    state = AgentState(user_query=user_query)
+    state = AgentState(user_query=user_query, messages=[], tasks={}, results={})
     final_state = agent.run(state)
     return final_state
 
@@ -162,20 +249,12 @@ class ChatSession:
 
     def send(self, user_input: str) -> str:
         """Send user input to the agent and get response."""
-        if not self.state.get("messages"):
-            # First turn
-            self.state["user_query"] = user_input
-        else:
-            # Subsequent turns
-            self.state["messages"].append(HumanMessage(content=user_input))
-            
+        self.state["user_query"] = user_input
+        self.state["messages"].append(HumanMessage(content=user_input))
+        
         self.state = self.agent.run(self.state)
         
-        # Return last message content
-        messages = self.state["messages"]
-        if messages:
-            return messages[-1].content
-        return ""
+        return self.state.get("final_response", "")
 
     def clear(self):
         """Clear conversation history."""
@@ -186,12 +265,14 @@ class ChatSession:
         history = []
         for msg in self.state.get("messages", []):
             role = "user"
-            if msg.type == "ai":
-                role = "agent"
-            elif msg.type == "system":
-                role = "system"
-            elif msg.type == "human":
-                role = "user"
+            if hasattr(msg, 'type'):
+                if msg.type == "ai":
+                    role = "agent"
+                elif msg.type == "system":
+                    role = "system"
+                elif msg.type == "human":
+                    role = "user"
             
-            history.append({"role": role, "content": msg.content})
+            content = msg.content if hasattr(msg, 'content') else str(msg)
+            history.append({"role": role, "content": content})
         return history

@@ -1036,57 +1036,121 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
         </div>
 '''
 
-    # Add sections
-    html += build_stats_section(sar_data)
+    # =========================================================================
+    # Generate Visualizations
+    # =========================================================================
+    from molx_agent.tools.sar_visyalizer import SARVisualizer
+    vis = SARVisualizer()
+    
+    plots = {}
+    
+    # 1. Position-wise SAR Map
+    if "r_group_analysis" in sar_data:
+        plots["pos_heatmap"] = vis.plot_position_sar_heatmap(sar_data["r_group_analysis"])
+        plots["act_dist"] = vis.plot_activity_distribution(sar_data["r_group_analysis"])
+        
+    # 2. MMP & Activity Cliffs
+    if "activity_cliffs" in sar_data:
+        plots["mmp_diff"] = vis.plot_mmp_activity_diff(sar_data["activity_cliffs"])
+        
+    # 3. FG Necessity
+    if "functional_group_sar" in sar_data:
+        plots["fg_matrix"] = vis.plot_fg_necessity_matrix(sar_data["functional_group_sar"])
+        
+    # 4. Property-Activity & Timeline & Radar
+    if "compounds" in sar_data:
+        plots["prop_act"] = vis.plot_property_activity(sar_data["compounds"])
+        plots["timeline"] = vis.plot_sar_timeline(sar_data["compounds"])
+        plots["radar"] = vis.plot_radar_chart(sar_data["compounds"])
+        
+    # 5. Scaffold Annotation
+    if "scaffold" in sar_data:
+        # Need to get R-positions from r_group_analysis
+        r_pos = []
+        if "r_group_analysis" in sar_data and "r_group_analysis" in sar_data["r_group_analysis"]:
+             r_pos = list(sar_data["r_group_analysis"]["r_group_analysis"].keys())
+        plots["scaffold_anno"] = vis.plot_scaffold_annotation(sar_data["scaffold"], r_pos)
 
-    # Add compound gallery if compounds are provided
-    if "compounds" in sar_data and sar_data["compounds"]:
-        html += build_compound_gallery_section(sar_data["compounds"])
+    # =========================================================================
+    # Build HTML Sections
+    # =========================================================================
+
+    # 1. Overview Dashboard (New)
+    html += '<div class="card"><h2>📊 SAR Overview Dashboard</h2><div class="mol-grid" style="grid-template-columns: 1fr 1fr;">'
+    if plots.get("timeline"):
+        html += f'<div><img src="{plots["timeline"]}" style="width:100%;border-radius:0.5rem;"></div>'
+    if plots.get("radar"):
+        html += f'<div><img src="{plots["radar"]}" style="width:100%;border-radius:0.5rem;"></div>'
+    html += '</div></div>'
+
+    # 2. Summary Stats
+    html += build_stats_section(sar_data)
 
     # Pass the raw tool output to each section builder
     # Each tool returns a dict that the section builder knows how to parse
     
     # Add R-group decomposition table with molecule visualization
+    
+    # 3. Property Analysis (New)
+    if plots.get("prop_act"):
+        html += f'<div class="card"><h2>⚗️ Property-Activity Landscape</h2><img src="{plots["prop_act"]}" style="width:100%;border-radius:0.5rem;"></div>'
+
+    # 4. R-Group Analysis (Enhanced)
     if "r_group_analysis" in sar_data:
-        rgroup_data = sar_data["r_group_analysis"]
-        scaffold = sar_data.get("scaffold")
-        scaffold_strategy = sar_data.get("scaffold_strategy")
-        
-        # If decomposed_compounds exist, show the visual table
-        if rgroup_data.get("decomposed_compounds"):
-            html += build_rgroup_decomposition_table_section(
-                rgroup_data, scaffold, scaffold_strategy
-            )
-        
-        # Show traditional R-group analysis statistics
+        # Insert Heatmap and Distribution before the table
+        if plots.get("pos_heatmap") or plots.get("act_dist"):
+            html += '<div class="card"><h2>🧪 R-Group SAR Visualization</h2><div class="mol-grid" style="grid-template-columns: 1fr 1fr;">'
+            if plots.get("pos_heatmap"):
+                html += f'<div><img src="{plots["pos_heatmap"]}" style="width:100%;border-radius:0.5rem;"></div>'
+            if plots.get("act_dist"):
+                html += f'<div><img src="{plots["act_dist"]}" style="width:100%;border-radius:0.5rem;"></div>'
+            html += '</div></div>'
+            
+        html += build_rgroup_decomposition_table_section(
+            sar_data["r_group_analysis"],
+            sar_data.get("scaffold"),
+            sar_data.get("scaffold_strategy")
+        )
         html += build_rgroup_section(sar_data["r_group_analysis"])
 
-    if "scaffold_sar" in sar_data:
-        html += build_scaffold_section(sar_data["scaffold_sar"])
-
+    # 5. Functional Groups (Enhanced)
     if "functional_group_sar" in sar_data:
-        # functional_group_sar tool returns {"functional_group_sar": [...], ...}
-        # so we pass the raw output directly
+        if plots.get("fg_matrix"):
+             html += f'<div class="card"><h2>🧩 Functional Group Necessity</h2><img src="{plots["fg_matrix"]}" style="width:100%;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
         html += build_functional_group_section(sar_data["functional_group_sar"])
 
-    if "positional_sar" in sar_data:
-        html += build_positional_section(sar_data["positional_sar"])
-
+    # 6. Conformational SAR
     if "conformational_sar" in sar_data:
         html += build_conformational_section(sar_data["conformational_sar"])
 
+    # 7. Activity Cliffs (Enhanced)
     if "activity_cliffs" in sar_data:
+        if plots.get("mmp_diff"):
+             html += f'<div class="card"><h2>📉 MMP Activity Distribution</h2><img src="{plots["mmp_diff"]}" style="width:100%;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
         html += build_activity_cliffs_section(sar_data["activity_cliffs"])
 
-    # Footer
-    html += '''
+    # 8. Scaffold SAR (Enhanced)
+    if "scaffold_sar" in sar_data:
+        if plots.get("scaffold_anno"):
+             html += f'<div class="card"><h2>🎯 Scaffold Annotation</h2><img src="{plots["scaffold_anno"]}" style="width:100%;max_width:500px;display:block;margin:0 auto;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
+        html += build_scaffold_section(sar_data["scaffold_sar"])
+
+    # 9. Positional SAR
+    if "positional_sar" in sar_data:
+        html += build_positional_section(sar_data["positional_sar"])
+        
+    # 10. Compound Gallery
+    if "compounds" in sar_data:
+        html += build_compound_gallery_section(sar_data["compounds"])
+
+    html += f'''
         <div class="footer">
-            <p>Generated by MolX SAR Agent | Powered by RDKit</p>
+            <p>Generated by MolX Agent • {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
         </div>
     </div>
 </body>
 </html>'''
-
+    
     return html
 
 

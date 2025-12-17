@@ -2,8 +2,8 @@
 **************************************************************************
 *  @Copyright [2025] Xtalpi Systems.
 *  @Author tongfu.e@xtalpi.com
-*  @Date [2025-12-15].
-*  @Description Intent classifier for user query classification.
+*  @Date [2025-12-17].
+*  @Description IntentClassifierAgent - AI-based intent classification.
 **************************************************************************
 """
 
@@ -11,6 +11,8 @@ import logging
 from enum import Enum
 from typing import Optional
 
+from molx_agent.agents.base import BaseAgent
+from molx_agent.agents.modules.state import AgentState
 from molx_agent.agents.modules.llm import invoke_llm
 
 logger = logging.getLogger(__name__)
@@ -25,29 +27,6 @@ class Intent(Enum):
     GENERAL_CHAT = "general_chat"  # General conversation
     UNSUPPORTED = "unsupported"  # Unsupported request types
 
-
-INTENT_CLASSIFIER_PROMPT = """You are an intent classifier for a SAR (Structure-Activity Relationship) analysis system.
-
-Classify the user's query into ONE of these categories:
-
-1. "sar_analysis" - SAR analysis, drug design, structure-activity relationships
-   Examples: "Analyze SAR of aspirin", "Compare activity of these compounds"
-
-2. "data_processing" - Processing molecular data files (CSV, Excel, SDF)
-   Examples: "Extract SMILES from this CSV", "Read my data file"
-
-3. "molecule_query" - Simple queries about molecules (MW, SMILES, properties)
-   Examples: "What is the molecular weight of aspirin?", "Convert name to SMILES"
-
-4. "general_chat" - General greetings, chitchat, off-topic conversation
-   Examples: "Hello", "How are you?", "What's the weather?"
-
-5. "unsupported" - Requests clearly outside the system's capabilities
-   Examples: "Write me a poem", "Help me with my homework"
-
-Return ONLY a JSON object:
-{"intent": "<category>", "confidence": <0.0-1.0>}
-"""
 
 # Friendly responses for non-SAR intents
 INTENT_RESPONSES = {
@@ -71,68 +50,118 @@ INTENT_RESPONSES = {
 }
 
 
-def classify_intent(query: str) -> tuple[Intent, float]:
-    """Classify user query intent.
+INTENT_CLASSIFIER_PROMPT = """You are an AI intent classifier for a SAR (Structure-Activity Relationship) analysis system.
 
-    Args:
-        query: User query string.
+Your task is to analyze the user's query and classify their intent.
 
-    Returns:
-        Tuple of (Intent, confidence_score).
+## Intent Categories:
+
+1. **sar_analysis** - SAR analysis, drug design, structure-activity relationships
+   - "Analyze SAR of aspirin"
+   - "Compare activity of these compounds"
+   - "Find R-group patterns"
+
+2. **data_processing** - Processing molecular data files (CSV, Excel, SDF)
+   - "Extract SMILES from this CSV"
+   - "Read my data file"
+   - "Process the Excel file"
+
+3. **molecule_query** - Simple queries about molecules (MW, SMILES, properties)
+   - "What is the molecular weight of aspirin?"
+   - "Convert name to SMILES"
+
+4. **general_chat** - General greetings, chitchat, off-topic conversation
+   - "Hello", "How are you?", "What's the weather?"
+
+5. **unsupported** - Requests clearly outside the system's capabilities
+   - "Write me a poem", "Help me with my homework"
+
+## Response Format:
+Return ONLY a JSON object:
+{
+    "reasoning": "Brief explanation of your classification",
+    "intent": "<category>",
+    "confidence": <0.0-1.0>
+}
+"""
+
+
+class IntentClassifierAgent(BaseAgent):
+    """AI-based intent classifier agent.
+    
+    Uses LLM to classify user queries into predefined intent categories.
     """
-    try:
-        result = invoke_llm(
-            INTENT_CLASSIFIER_PROMPT,
-            f"Query: {query}",
-            parse_json=True,
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="intent_classifier",
+            description="Classifies user queries using AI",
         )
 
-        intent_str = result.get("intent", "sar_analysis")
-        confidence = result.get("confidence", 0.5)
+    def run(self, state: AgentState) -> AgentState:
+        """Classify user intent.
+        
+        Args:
+            state: Agent state with user_query.
+            
+        Returns:
+            Updated state with classified intent.
+        """
+        from rich.console import Console
+        console = Console()
+        
+        user_query = state.get("user_query", "")
+        console.print("\n[bold blue]🎯 IntentClassifier: Analyzing query...[/]")
 
-        # Map to Intent enum
-        intent_map = {
-            "sar_analysis": Intent.SAR_ANALYSIS,
-            "data_processing": Intent.DATA_PROCESSING,
-            "molecule_query": Intent.MOLECULE_QUERY,
-            "general_chat": Intent.GENERAL_CHAT,
-            "unsupported": Intent.UNSUPPORTED,
-        }
+        try:
+            result = invoke_llm(
+                INTENT_CLASSIFIER_PROMPT,
+                f"User Query: {user_query}",
+                parse_json=True,
+            )
 
-        intent = intent_map.get(intent_str, Intent.SAR_ANALYSIS)
-        logger.info(f"Classified intent: {intent.value} ({confidence:.2f})")
+            intent_str = result.get("intent", "sar_analysis")
+            confidence = result.get("confidence", 0.5)
+            reasoning = result.get("reasoning", "")
 
-        return intent, confidence
+            # Map to Intent enum
+            intent_map = {
+                "sar_analysis": Intent.SAR_ANALYSIS,
+                "data_processing": Intent.DATA_PROCESSING,
+                "molecule_query": Intent.MOLECULE_QUERY,
+                "general_chat": Intent.GENERAL_CHAT,
+                "unsupported": Intent.UNSUPPORTED,
+            }
 
-    except Exception as e:
-        logger.error(f"Intent classification error: {e}")
-        # Default to SAR analysis on error
-        return Intent.SAR_ANALYSIS, 0.5
+            intent = intent_map.get(intent_str, Intent.SAR_ANALYSIS)
+            
+            console.print(f"   [dim]Reasoning: {reasoning[:100]}...[/]" if len(reasoning) > 100 else f"   [dim]Reasoning: {reasoning}[/]")
+            console.print(f"   [green]Intent: {intent.value} (confidence: {confidence:.2f})[/]")
+            
+            # Store in state
+            state["intent"] = intent
+            state["intent_confidence"] = confidence
+            state["intent_reasoning"] = reasoning
+            
+            logger.info(f"Classified intent: {intent.value} ({confidence:.2f})")
 
+        except Exception as e:
+            console.print(f"[red]✗ IntentClassifier error: {e}[/]")
+            logger.error(f"Intent classification error: {e}")
+            # Default to SAR analysis on error
+            state["intent"] = Intent.SAR_ANALYSIS
+            state["intent_confidence"] = 0.5
 
-def get_intent_response(intent: Intent) -> Optional[str]:
-    """Get friendly response for non-supported intents.
+        return state
 
-    Args:
-        intent: Classified intent.
+    def is_supported(self, intent: Intent) -> bool:
+        """Check if intent is supported for processing."""
+        return intent in (
+            Intent.SAR_ANALYSIS,
+            Intent.DATA_PROCESSING,
+            Intent.MOLECULE_QUERY,
+        )
 
-    Returns:
-        Response string if intent is not supported, None otherwise.
-    """
-    return INTENT_RESPONSES.get(intent)
-
-
-def is_supported_intent(intent: Intent) -> bool:
-    """Check if intent is supported for processing.
-
-    Args:
-        intent: Classified intent.
-
-    Returns:
-        True if intent should be processed, False otherwise.
-    """
-    return intent in (
-        Intent.SAR_ANALYSIS,
-        Intent.DATA_PROCESSING,
-        Intent.MOLECULE_QUERY,
-    )
+    def get_response(self, intent: Intent) -> Optional[str]:
+        """Get friendly response for non-supported intents."""
+        return INTENT_RESPONSES.get(intent)
