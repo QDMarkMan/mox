@@ -541,66 +541,106 @@ class GenerateConformationalSAR(BaseTool):
 class RunFullSARAnalysisInput(BaseModel):
     """Input for RunFullSARAnalysisTool."""
     compounds: list[dict] = Field(description="List of compound dictionaries with smiles and activity")
+    activity_columns: list[str] = Field(default=None, description="List of activity column names for multi-activity analysis")
 
 
 class RunFullSARAnalysisTool(BaseTool):
-    """Run all SAR analysis tools on compound data."""
+    """Run all SAR analysis tools on compound data with multi-activity support."""
 
     name: str = "run_full_sar_analysis"
     description: str = (
         "Run complete SAR analysis suite: R-group analysis, functional groups, "
-        "activity cliffs, conformational analysis. Returns comprehensive SAR results."
+        "activity cliffs, conformational analysis. Supports multi-activity analysis."
     )
     args_schema: type[BaseModel] = RunFullSARAnalysisInput
 
-    def _run(self, compounds: list[dict]) -> dict:
-        """Execute all SAR analyses."""
+    def _run(self, compounds: list[dict], activity_columns: list[str] = None) -> dict:
+        """Execute all SAR analyses with optional multi-activity support."""
         from datetime import datetime
         import logging
         
         logger = logging.getLogger(__name__)
         
+        # Base results structure
         sar_results = {
             "total_compounds": len(compounds),
             "generated_at": datetime.now().isoformat(),
             "compounds": compounds,
         }
-
+        
+        # Multi-activity mode: analyze each activity column
+        if activity_columns and len(activity_columns) > 0:
+            sar_results["activity_columns"] = activity_columns
+            sar_results["per_activity_results"] = {}
+            
+            for col in activity_columns:
+                logger.info(f"Running SAR analysis for activity: {col}")
+                remapped = self._remap_activity(compounds, col)
+                col_results = self._analyze_single_activity(remapped, logger)
+                sar_results["per_activity_results"][col] = col_results
+            
+            # Use the first activity column as the default/primary
+            if activity_columns:
+                primary_col = activity_columns[0]
+                primary_results = sar_results["per_activity_results"].get(primary_col, {})
+                for key, value in primary_results.items():
+                    if key not in sar_results:
+                        sar_results[key] = value
+        else:
+            # Single activity mode (backward compatible)
+            sar_results.update(self._analyze_single_activity(compounds, logger))
+        
+        return sar_results
+    
+    def _remap_activity(self, compounds: list[dict], activity_column: str) -> list[dict]:
+        """Remap a specific activity column to the 'activity' field."""
+        remapped = []
+        for cpd in compounds:
+            new_cpd = cpd.copy()
+            activities = cpd.get("activities", {})
+            if activity_column in activities:
+                new_cpd["activity"] = activities[activity_column]
+            remapped.append(new_cpd)
+        return remapped
+    
+    def _analyze_single_activity(self, compounds: list[dict], logger) -> dict:
+        """Run all SAR analyses for a single activity."""
+        results = {}
         data_json = json.dumps(compounds)
 
         # R-group Analysis
         try:
             result = AnalyzeRGroupTable()._run(data_json)
-            sar_results["r_group_analysis"] = json.loads(result)
+            results["r_group_analysis"] = json.loads(result)
         except Exception as e:
             logger.error(f"R-group analysis error: {e}")
-            sar_results["r_group_analysis"] = {"error": str(e)}
+            results["r_group_analysis"] = {"error": str(e)}
 
         # Functional Group SAR
         try:
             result = GenerateFunctionalGroupSAR()._run(data_json)
-            sar_results["functional_group_sar"] = json.loads(result)
+            results["functional_group_sar"] = json.loads(result)
         except Exception as e:
             logger.error(f"FG SAR error: {e}")
-            sar_results["functional_group_sar"] = {"error": str(e)}
+            results["functional_group_sar"] = {"error": str(e)}
 
         # Activity Cliffs
         try:
             result = IdentifyActivityCliffs()._run(data_json)
-            sar_results["activity_cliffs"] = json.loads(result)
+            results["activity_cliffs"] = json.loads(result)
         except Exception as e:
             logger.error(f"Activity cliffs error: {e}")
-            sar_results["activity_cliffs"] = {"error": str(e)}
+            results["activity_cliffs"] = {"error": str(e)}
 
         # Conformational SAR
         try:
             result = GenerateConformationalSAR()._run(data_json)
-            sar_results["conformational_sar"] = json.loads(result)
+            results["conformational_sar"] = json.loads(result)
         except Exception as e:
             logger.error(f"Conformational SAR error: {e}")
-            sar_results["conformational_sar"] = {"error": str(e)}
+            results["conformational_sar"] = {"error": str(e)}
 
-        return sar_results
+        return results
 
 
 class GenerateHTMLReportInput(BaseModel):

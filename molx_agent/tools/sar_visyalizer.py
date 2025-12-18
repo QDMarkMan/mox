@@ -248,18 +248,31 @@ def mol_to_base64_png(smiles: str, width: int = 300, height: int = 200) -> str:
 class SARVisualizerAdvanced:
     """Advanced SAR Visualizer with 8 interactive plot types."""
     
-    def __init__(self, df: pd.DataFrame, config: SARVisualizerConfig = None):
+    def __init__(self, df: pd.DataFrame, config: SARVisualizerConfig = None, 
+                 activity_column: str = None):
         """
         Initialize visualizer with preprocessed DataFrame.
         
         Args:
             df: DataFrame with pActivity and molecular properties calculated.
             config: Configuration parameters.
+            activity_column: Specific activity column to use for visualizations.
+                           If provided, will remap this column to pActivity.
         """
-        self.df = df
+        self.df = df.copy()
         self.config = config or SARVisualizerConfig()
         self.output_dir = VIS_OUTPUT_DIR
+        self.activity_column = activity_column
         os.makedirs(self.output_dir, exist_ok=True)
+        
+        # If an activity column is specified, remap it to pActivity
+        if activity_column and activity_column in self.df.columns:
+            # Store original pActivity if it exists
+            if "pActivity" in self.df.columns:
+                self.df["pActivity_original"] = self.df["pActivity"]
+            # Use the specified activity column as pActivity
+            self.df["pActivity"] = self.df[activity_column]
+            logger.info(f"Using activity column '{activity_column}' for visualizations")
         
         # Identify R-group columns
         self.rgroup_columns = [

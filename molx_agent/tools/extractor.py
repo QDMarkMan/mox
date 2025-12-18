@@ -207,6 +207,7 @@ def _extract_from_dataframe(df, file_path: str, llm: Any = None) -> dict:
             "id": id_col,
             "activity_cols": activity_cols,
         },
+        "activity_columns": activity_cols,  # Explicit list for downstream multi-activity support
         "activity_stats": _calculate_activity_stats([c.get("activity") for c in compounds]),
     }
 

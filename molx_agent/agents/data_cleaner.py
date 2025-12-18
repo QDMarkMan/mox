@@ -207,6 +207,9 @@ class DataCleanerAgent(BaseAgent):
             output_files = saver.invoke({"data": extracted_data, "task_id": tid})
             extracted_data["output_files"] = output_files
             
+            # Preserve activity columns metadata for multi-activity report support
+            extracted_data["activity_columns"] = extracted_data.get("columns", {}).get("activity_cols", [])
+            
             # Update state
             if "results" not in state:
                 state["results"] = {}

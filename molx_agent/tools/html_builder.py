@@ -331,7 +331,121 @@ tr:hover td { background: var(--background); }
     font-weight: 600;
     margin-left: 0.5rem;
 }
+
+/* Activity Selector - Multi-Activity Support */
+.activity-selector {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.activity-selector label {
+    font-weight: 600;
+    color: var(--text-strong);
+    white-space: nowrap;
+}
+
+.activity-selector select {
+    flex: 1;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    font-size: 0.875rem;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+    max-width: 400px;
+}
+
+.activity-selector select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.activity-section[data-activity] {
+    display: none;
+}
+
+.activity-section[data-activity].active {
+    display: block;
+}
 """
+
+
+# =============================================================================
+# Multi-Activity Selector
+# =============================================================================
+
+def build_activity_selector(activity_columns: list[str], current_activity: str = None) -> str:
+    """Build activity column selector dropdown for multi-activity reports.
+    
+    Args:
+        activity_columns: List of activity column names.
+        current_activity: Currently selected activity (default: first).
+    
+    Returns:
+        HTML string for the activity selector component.
+    """
+    if not activity_columns or len(activity_columns) <= 1:
+        return ""
+    
+    current = current_activity or activity_columns[0]
+    options = "".join(
+        f'<option value="{col}" {"selected" if col == current else ""}>{col}</option>'
+        for col in activity_columns
+    )
+    
+    return f'''
+    <div class="activity-selector">
+        <label>📊 Activity Column:</label>
+        <select id="activity-select" onchange="switchActivity(this.value)">
+            {options}
+        </select>
+        <span style="color:var(--text-muted);font-size:0.875rem;">
+            {len(activity_columns)} activity columns available
+        </span>
+    </div>
+    '''
+
+
+def build_activity_switching_js() -> str:
+    """Build JavaScript for activity section switching."""
+    return '''
+<script>
+function switchActivity(column) {
+    // Hide all activity sections
+    document.querySelectorAll('.activity-section[data-activity]').forEach(el => {
+        el.classList.remove('active');
+    });
+    
+    // Show selected activity section
+    document.querySelectorAll('.activity-section[data-activity="' + column + '"]').forEach(el => {
+        el.classList.add('active');
+    });
+    
+    // Update stats if present
+    const statsEl = document.getElementById('activity-stats-' + column.replace(/[^a-zA-Z0-9]/g, '_'));
+    if (statsEl) {
+        document.querySelectorAll('.activity-stats').forEach(s => s.style.display = 'none');
+        statsEl.style.display = 'block';
+    }
+}
+
+// Initialize: show first activity section on load
+document.addEventListener('DOMContentLoaded', function() {
+    const selector = document.getElementById('activity-select');
+    if (selector) {
+        switchActivity(selector.value);
+    }
+});
+</script>
+'''
 
 
 # =============================================================================
@@ -342,6 +456,7 @@ def build_rgroup_decomposition_table_section(
     r_group_data: dict,
     scaffold: str = None,
     scaffold_strategy: str = None,
+    activity_columns: list[str] = None,
 ) -> str:
     """Build R-group decomposition table with molecule SVGs and core highlighting.
     
@@ -349,6 +464,7 @@ def build_rgroup_decomposition_table_section(
         r_group_data: Dict containing decomposed_compounds and ocat_pairs.
         scaffold: SMARTS/SMILES of the core scaffold.
         scaffold_strategy: Strategy used (mcs, murcko, custom).
+        activity_columns: List of activity column names for multi-activity display.
     
     Returns:
         HTML string for the R-group decomposition section.
@@ -494,6 +610,9 @@ def build_rgroup_decomposition_table_section(
     # Build table
     html += '<div class="table-container"><table class="rgroup-table">'
     
+    # Determine which activity columns to display
+    display_activity_cols = activity_columns if activity_columns else []
+    
     # Header
     html += '<thead><tr>'
     html += '<th>ID</th>'
@@ -501,7 +620,17 @@ def build_rgroup_decomposition_table_section(
     for pos in r_positions:
         html += f'<th class="rgroup-cell">{pos}</th>'
     html += '<th class="activity-cell">Name</th>'
-    html += '<th class="activity-cell">Activity</th>'
+    
+    # Add headers for each activity column, or single "Activity" if none specified
+    if display_activity_cols:
+        for col in display_activity_cols:
+            # Shorten column name for display
+            short_name = col.replace("inhibitory activity", "").replace("(uM)", "").strip()
+            short_name = short_name[:25] + "..." if len(short_name) > 25 else short_name
+            html += f'<th class="activity-cell" title="{col}">{short_name}</th>'
+    else:
+        html += '<th class="activity-cell">Activity</th>'
+    
     html += '</tr></thead>'
     
     # Body
@@ -512,6 +641,7 @@ def build_rgroup_decomposition_table_section(
         cpd_id = cpd.get("compound_id", "")
         smiles = cpd.get("smiles", "")
         activity = cpd.get("activity")
+        activities = cpd.get("activities", {})
         # Use name from original data, fallback to compound_id
         name = cpd.get("name") or cpd.get("Name") or cpd_id
         r_groups = cpd.get("r_groups", {})
@@ -528,8 +658,17 @@ def build_rgroup_decomposition_table_section(
             html += f'<td class="rgroup-cell">{rg_svg}</td>'
         
         html += f'<td class="activity-cell">{name}</td>'
-        act_str = f"{activity}" if activity is not None else "-"
-        html += f'<td class="activity-cell">{act_str}</td>'
+        
+        # Add activity values for each column, or single activity
+        if display_activity_cols:
+            for col in display_activity_cols:
+                act_val = activities.get(col, activity) if activities else activity
+                act_str = f"{act_val}" if act_val is not None else "-"
+                html += f'<td class="activity-cell">{act_str}</td>'
+        else:
+            act_str = f"{activity}" if activity is not None else "-"
+            html += f'<td class="activity-cell">{act_str}</td>'
+        
         html += '</tr>'
     
     html += '</tbody></table></div>'
@@ -1003,6 +1142,50 @@ def build_positional_section(pos_data: dict) -> str:
 # Main Report Builder
 # =============================================================================
 
+def _build_activity_sections(sar_data: dict, plots: dict = None) -> str:
+    """Build SAR analysis sections for a single activity.
+    
+    This is a helper function used to render SAR sections for each activity
+    in multi-activity mode.
+    
+    Args:
+        sar_data: SAR analysis results for a single activity.
+        plots: Optional visualization plots dictionary.
+    
+    Returns:
+        HTML string containing all section cards.
+    """
+    if plots is None:
+        plots = {}
+    
+    html = ""
+    
+    # R-Group Analysis
+    if "r_group_analysis" in sar_data:
+        html += build_rgroup_section(sar_data["r_group_analysis"])
+    
+    # Functional Group SAR
+    if "functional_group_sar" in sar_data:
+        html += build_functional_group_section(sar_data["functional_group_sar"])
+    
+    # Conformational SAR
+    if "conformational_sar" in sar_data:
+        html += build_conformational_section(sar_data["conformational_sar"])
+    
+    # Activity Cliffs
+    if "activity_cliffs" in sar_data:
+        html += build_activity_cliffs_section(sar_data["activity_cliffs"])
+    
+    # Scaffold SAR
+    if "scaffold_sar" in sar_data:
+        html += build_scaffold_section(sar_data["scaffold_sar"])
+    
+    # Positional SAR
+    if "positional_sar" in sar_data:
+        html += build_positional_section(sar_data["positional_sar"])
+    
+    return html
+
 def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") -> str:
     """Build complete HTML SAR report.
 
@@ -1051,7 +1234,35 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
 
     # 1. Summary Stats
     html += build_stats_section(sar_data)
-
+    
+    # Multi-activity support: add activity selector if multiple columns available
+    activity_columns = sar_data.get("activity_columns", [])
+    per_activity_results = sar_data.get("per_activity_results", {})
+    
+    if activity_columns and len(activity_columns) > 1:
+        # Add activity selector UI
+        html += build_activity_selector(activity_columns)
+        
+        # Render per-activity sections
+        for i, col in enumerate(activity_columns):
+            col_results = per_activity_results.get(col, {})
+            is_first = (i == 0)
+            active_class = "active" if is_first else ""
+            
+            html += f'<div class="activity-section {active_class}" data-activity="{col}">'
+            html += f'<div class="card"><h2>📊 SAR Analysis: {col}</h2></div>'
+            
+            # Render this activity's sections
+            html += _build_activity_sections(col_results, plots)
+            
+            html += '</div>'
+        
+        # Add JavaScript for switching
+        html += build_activity_switching_js()
+    
+    # For both single and multi-activity: always render common sections
+    # The following sections are always shown (not per-activity specific)
+    
     # Pass the raw tool output to each section builder
     # Each tool returns a dict that the section builder knows how to parse
     
@@ -1061,49 +1272,53 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
     if plots.get("prop_act"):
         html += f'<div class="card"><h2>⚗️ Property-Activity Landscape</h2><img src="{plots["prop_act"]}" style="width:100%;border-radius:0.5rem;"></div>'
 
-    # 4. R-Group Analysis (Enhanced)
-    if "r_group_analysis" in sar_data:
-        # Insert Heatmap and Distribution before the table
-        if plots.get("pos_heatmap") or plots.get("act_dist"):
-            html += '<div class="card"><h2>🧪 R-Group SAR Visualization</h2><div class="mol-grid" style="grid-template-columns: 1fr 1fr;">'
-            if plots.get("pos_heatmap"):
-                html += f'<div><img src="{plots["pos_heatmap"]}" style="width:100%;border-radius:0.5rem;"></div>'
-            if plots.get("act_dist"):
-                html += f'<div><img src="{plots["act_dist"]}" style="width:100%;border-radius:0.5rem;"></div>'
-            html += '</div></div>'
-            
-        html += build_rgroup_decomposition_table_section(
-            sar_data["r_group_analysis"],
-            sar_data.get("scaffold"),
-            sar_data.get("scaffold_strategy")
-        )
-        html += build_rgroup_section(sar_data["r_group_analysis"])
+    # Single activity mode: render analysis sections directly
+    # (In multi-activity mode, these are rendered per activity above)
+    if not (activity_columns and len(activity_columns) > 1):
+        # 4. R-Group Analysis (Enhanced)
+        if "r_group_analysis" in sar_data:
+            # Insert Heatmap and Distribution before the table
+            if plots.get("pos_heatmap") or plots.get("act_dist"):
+                html += '<div class="card"><h2>🧪 R-Group SAR Visualization</h2><div class="mol-grid" style="grid-template-columns: 1fr 1fr;">'
+                if plots.get("pos_heatmap"):
+                    html += f'<div><img src="{plots["pos_heatmap"]}" style="width:100%;border-radius:0.5rem;"></div>'
+                if plots.get("act_dist"):
+                    html += f'<div><img src="{plots["act_dist"]}" style="width:100%;border-radius:0.5rem;"></div>'
+                html += '</div></div>'
+                
+            html += build_rgroup_decomposition_table_section(
+                sar_data["r_group_analysis"],
+                sar_data.get("scaffold"),
+                sar_data.get("scaffold_strategy"),
+                sar_data.get("activity_columns", []),
+            )
+            html += build_rgroup_section(sar_data["r_group_analysis"])
 
-    # 5. Functional Groups (Enhanced)
-    if "functional_group_sar" in sar_data:
-        if plots.get("fg_matrix"):
-             html += f'<div class="card"><h2>🧩 Functional Group Necessity</h2><img src="{plots["fg_matrix"]}" style="width:100%;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
-        html += build_functional_group_section(sar_data["functional_group_sar"])
+        # 5. Functional Groups (Enhanced)
+        if "functional_group_sar" in sar_data:
+            if plots.get("fg_matrix"):
+                 html += f'<div class="card"><h2>🧩 Functional Group Necessity</h2><img src="{plots["fg_matrix"]}" style="width:100%;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
+            html += build_functional_group_section(sar_data["functional_group_sar"])
 
-    # 6. Conformational SAR
-    if "conformational_sar" in sar_data:
-        html += build_conformational_section(sar_data["conformational_sar"])
+        # 6. Conformational SAR
+        if "conformational_sar" in sar_data:
+            html += build_conformational_section(sar_data["conformational_sar"])
 
-    # 7. Activity Cliffs (Enhanced)
-    if "activity_cliffs" in sar_data:
-        if plots.get("mmp_diff"):
-             html += f'<div class="card"><h2>📉 MMP Activity Distribution</h2><img src="{plots["mmp_diff"]}" style="width:100%;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
-        html += build_activity_cliffs_section(sar_data["activity_cliffs"])
+        # 7. Activity Cliffs (Enhanced)
+        if "activity_cliffs" in sar_data:
+            if plots.get("mmp_diff"):
+                 html += f'<div class="card"><h2>📉 MMP Activity Distribution</h2><img src="{plots["mmp_diff"]}" style="width:100%;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
+            html += build_activity_cliffs_section(sar_data["activity_cliffs"])
 
-    # 8. Scaffold SAR (Enhanced)
-    if "scaffold_sar" in sar_data:
-        if plots.get("scaffold_anno"):
-             html += f'<div class="card"><h2>🎯 Scaffold Annotation</h2><img src="{plots["scaffold_anno"]}" style="width:100%;max_width:500px;display:block;margin:0 auto;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
-        html += build_scaffold_section(sar_data["scaffold_sar"])
+        # 8. Scaffold SAR (Enhanced)
+        if "scaffold_sar" in sar_data:
+            if plots.get("scaffold_anno"):
+                 html += f'<div class="card"><h2>🎯 Scaffold Annotation</h2><img src="{plots["scaffold_anno"]}" style="width:100%;max_width:500px;display:block;margin:0 auto;border-radius:0.5rem;margin-bottom:1.5rem;"></div>'
+            html += build_scaffold_section(sar_data["scaffold_sar"])
 
-    # 9. Positional SAR
-    if "positional_sar" in sar_data:
-        html += build_positional_section(sar_data["positional_sar"])
+        # 9. Positional SAR
+        if "positional_sar" in sar_data:
+            html += build_positional_section(sar_data["positional_sar"])
         
     # 10. Compound Gallery
     if "compounds" in sar_data:

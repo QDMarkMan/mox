@@ -186,12 +186,68 @@ class PlannerAgent(BaseAgent):
         console.print("\n[bold yellow]🔍 REFLECT: Evaluating results...[/]")
 
         try:
-            # Prepare context for reflection
-            user_query = state.get("user_query", "")
             tasks = state.get("tasks", {})
             results = state.get("results", {})
             
-            # Build summary of what happened
+            # First, check task completion status directly (don't rely on LLM)
+            all_done = all(t.get("status") == "done" for t in tasks.values())
+            has_errors = any(
+                isinstance(results.get(tid), dict) and "error" in results.get(tid, {})
+                for tid in tasks.keys()
+            )
+            
+            # Check if report was generated (key success indicator)
+            report_generated = False
+            for tid, result in results.items():
+                if isinstance(result, dict):
+                    if result.get("report_path") or result.get("output_files", {}).get("html"):
+                        report_generated = True
+                        break
+            
+            # If all tasks done and report generated, mark as success without LLM
+            if all_done and report_generated and not has_errors:
+                summary = f"All {len(tasks)} tasks completed successfully. Report generated."
+                state["reflection"] = {
+                    "success": True,
+                    "summary": summary,
+                    "issues": [],
+                    "should_replan": False,
+                    "replan_reason": ""
+                }
+                console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
+                return state
+            
+            # If there are actual errors, report them but don't replan
+            if has_errors:
+                error_tasks = [
+                    tid for tid, r in results.items() 
+                    if isinstance(r, dict) and "error" in r
+                ]
+                state["reflection"] = {
+                    "success": False,
+                    "summary": f"Tasks completed with errors in: {error_tasks}",
+                    "issues": [f"Error in {tid}: {results[tid].get('error', 'unknown')}" for tid in error_tasks],
+                    "should_replan": False,  # Don't replan on errors, just report
+                    "replan_reason": ""
+                }
+                console.print(f"[yellow]⚠ REFLECT: Completed with errors in {error_tasks}[/]")
+                return state
+            
+            # If all tasks done but no report, that's still success (maybe no reporter task)
+            if all_done:
+                summary = f"All {len(tasks)} tasks completed."
+                state["reflection"] = {
+                    "success": True,
+                    "summary": summary,
+                    "issues": [],
+                    "should_replan": False,
+                    "replan_reason": ""
+                }
+                console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
+                return state
+            
+            # Only use LLM if tasks are not all done (unusual case)
+            user_query = state.get("user_query", "")
             context = f"""
 Original Query: {user_query}
 

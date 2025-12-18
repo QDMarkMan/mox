@@ -77,10 +77,19 @@ class ReporterAgent(BaseAgent):
                     return state
                 
                 console.print(f"[dim]   Found {len(compound_data)} compounds[/]")
+                
+                # Get activity columns for multi-activity analysis
+                activity_cols = self._get_activity_columns(results)
+                if activity_cols:
+                    console.print(f"[dim]   Activity columns: {activity_cols}[/]")
+                
                 console.print("[dim]   Running SAR analyses via tool...[/]")
                 
-                # Step 2: Run analysis using tool
-                sar_results = self.analysis_tool.invoke({"compounds": compound_data})
+                # Step 2: Run analysis using tool (with multi-activity support)
+                sar_results = self.analysis_tool.invoke({
+                    "compounds": compound_data,
+                    "activity_columns": activity_cols if activity_cols else None,
+                })
 
             # Step 3: Generate HTML report using tool
             console.print("[dim]   Generating HTML report...[/]")
@@ -123,6 +132,15 @@ class ReporterAgent(BaseAgent):
                 return result
         return None
 
+    def _get_activity_columns(self, results: dict) -> list[str]:
+        """Extract activity column names from data extraction results."""
+        for task_id, result in results.items():
+            if isinstance(result, dict):
+                cols = result.get("activity_columns", [])
+                if cols:
+                    return cols
+        return []
+
     def _merge_sar_results(self, sar_agent_results: dict) -> dict:
         """Merge SAR Agent results with additional analyses."""
         compounds = sar_agent_results.get("compounds", [])
@@ -160,6 +178,7 @@ class ReporterAgent(BaseAgent):
                             compounds.append({
                                 "smiles": smi,
                                 "activity": item.get("activity"),
+                                "activities": item.get("activities", {}),  # Multi-activity support
                                 "compound_id": item.get("compound_id", f"Cpd-{i+1}"),
                                 "name": item.get("name") or item.get("Name"),
                             })
