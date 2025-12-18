@@ -1037,53 +1037,19 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
 '''
 
     # =========================================================================
-    # Generate Visualizations
+    # Generate Visualizations (if advanced data is available)
     # =========================================================================
-    from molx_agent.tools.sar_visyalizer import SARVisualizer
-    vis = SARVisualizer()
-    
     plots = {}
     
-    # 1. Position-wise SAR Map
-    if "r_group_analysis" in sar_data:
-        plots["pos_heatmap"] = vis.plot_position_sar_heatmap(sar_data["r_group_analysis"])
-        plots["act_dist"] = vis.plot_activity_distribution(sar_data["r_group_analysis"])
-        
-    # 2. MMP & Activity Cliffs
-    if "activity_cliffs" in sar_data:
-        plots["mmp_diff"] = vis.plot_mmp_activity_diff(sar_data["activity_cliffs"])
-        
-    # 3. FG Necessity
-    if "functional_group_sar" in sar_data:
-        plots["fg_matrix"] = vis.plot_fg_necessity_matrix(sar_data["functional_group_sar"])
-        
-    # 4. Property-Activity & Timeline & Radar
-    if "compounds" in sar_data:
-        plots["prop_act"] = vis.plot_property_activity(sar_data["compounds"])
-        plots["timeline"] = vis.plot_sar_timeline(sar_data["compounds"])
-        plots["radar"] = vis.plot_radar_chart(sar_data["compounds"])
-        
-    # 5. Scaffold Annotation
-    if "scaffold" in sar_data:
-        # Need to get R-positions from r_group_analysis
-        r_pos = []
-        if "r_group_analysis" in sar_data and "r_group_analysis" in sar_data["r_group_analysis"]:
-             r_pos = list(sar_data["r_group_analysis"]["r_group_analysis"].keys())
-        plots["scaffold_anno"] = vis.plot_scaffold_annotation(sar_data["scaffold"], r_pos)
+    # Note: Advanced visualizations using SARVisualizerAdvanced require DataFrame 
+    # with pActivity. For basic reports, we skip these plots.
+    # Use generate_sar_visualizations() separately for full interactive charts.
 
     # =========================================================================
     # Build HTML Sections
     # =========================================================================
 
-    # 1. Overview Dashboard (New)
-    html += '<div class="card"><h2>📊 SAR Overview Dashboard</h2><div class="mol-grid" style="grid-template-columns: 1fr 1fr;">'
-    if plots.get("timeline"):
-        html += f'<div><img src="{plots["timeline"]}" style="width:100%;border-radius:0.5rem;"></div>'
-    if plots.get("radar"):
-        html += f'<div><img src="{plots["radar"]}" style="width:100%;border-radius:0.5rem;"></div>'
-    html += '</div></div>'
-
-    # 2. Summary Stats
+    # 1. Summary Stats
     html += build_stats_section(sar_data)
 
     # Pass the raw tool output to each section builder
@@ -1154,6 +1120,52 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
     return html
 
 
+def build_advanced_sar_section(vis_results: dict) -> str:
+    """Build advanced SAR visualization section with interactive Plotly charts.
+    
+    Args:
+        vis_results: Dictionary from SARVisualizerAdvanced.generate_all()
+    
+    Returns:
+        HTML string for the advanced SAR section.
+    """
+    if not vis_results:
+        return ""
+    
+    html = '<div class="card"><h2>📊 Advanced SAR Visualizations</h2>'
+    html += '<p style="color:var(--text-muted);margin-bottom:1.5rem;">Interactive plots - hover for details, zoom and pan available.</p>'
+    
+    # List of visualization types with titles
+    plot_titles = {
+        "position_heatmap": ("🎯 Position-wise SAR Heatmap", "Activity patterns across R-group positions"),
+        "mmp_analysis": ("🔗 Matched Molecular Pair Analysis", "Single-change structure-activity pairs"),
+        "fg_matrix": ("🧪 Functional Group Necessity", "Impact of functional groups on activity"),
+        "property_activity": ("📈 Property-Activity Relationships", "Correlations with molecular properties"),
+        "activity_distribution": ("📊 Activity Distribution", "Activity spread per R-group position"),
+        "lead_radar": ("🎖️ Lead vs Backup Comparison", "Multi-criteria candidate comparison"),
+        "timeline": ("📅 SAR Evolution Timeline", "Activity improvement over iterations"),
+        "scaffold_annotation": ("🧬 Scaffold Annotation", "Core scaffold with position classifications"),
+    }
+    
+    for key, (title, description) in plot_titles.items():
+        result = vis_results.get(key, {})
+        html_div = result.get("html_div", "")
+        
+        if html_div:
+            html += f'''
+            <div style="margin-bottom:2rem;">
+                <h3 style="margin-bottom:0.5rem;">{title}</h3>
+                <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;">{description}</p>
+                <div style="background:white;border-radius:var(--radius);padding:1rem;border:1px solid var(--border);">
+                    {html_div}
+                </div>
+            </div>
+            '''
+    
+    html += '</div>'
+    return html
+
+
 def save_html_report(html: str, filename: str = None) -> str:
     """Save HTML report to file.
 
@@ -1176,3 +1188,4 @@ def save_html_report(html: str, filename: str = None) -> str:
         f.write(html)
 
     return filepath
+

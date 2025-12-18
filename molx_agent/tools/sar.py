@@ -18,6 +18,8 @@ from rdkit.Chem.MolStandardize import rdMolStandardize
 from rdkit.Chem.Scaffolds import MurckoScaffold
 from rdkit.ML.Cluster import Butina
 
+from molx_agent.tools.utils import get_morgan_fp
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,7 +92,7 @@ class ClusterMolecules(BaseTool):
                 mol = Chem.MolFromSmiles(smi)
                 if mol:
                     mols.append(mol)
-                    fps.append(AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=2048))
+                    fps.append(get_morgan_fp(mol))
                     valid_smiles.append(smi)
 
             if len(fps) < 2:
@@ -334,8 +336,8 @@ class AnalyzeMMP(BaseTool):
                 return "Error: Invalid SMILES"
 
             # Calculate fingerprints
-            fp1 = AllChem.GetMorganFingerprintAsBitVect(mol1, 2, nBits=2048)
-            fp2 = AllChem.GetMorganFingerprintAsBitVect(mol2, 2, nBits=2048)
+            fp1 = get_morgan_fp(mol1)
+            fp2 = get_morgan_fp(mol2)
             similarity = DataStructs.TanimotoSimilarity(fp1, fp2)
 
             # Find MCS

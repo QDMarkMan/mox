@@ -3,6 +3,22 @@ import re
 import requests
 from rdkit import Chem, DataStructs
 from rdkit.Chem import AllChem
+from rdkit.Chem import rdFingerprintGenerator
+
+
+def get_morgan_fp(mol, radius: int = 2, n_bits: int = 2048):
+    """Generate Morgan fingerprint using the new MorganGenerator API.
+    
+    Args:
+        mol: RDKit Mol object
+        radius: Fingerprint radius (default 2)
+        n_bits: Number of bits (default 2048)
+        
+    Returns:
+        Morgan fingerprint as bit vector
+    """
+    generator = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=n_bits)
+    return generator.GetFingerprint(mol)
 
 
 def is_smiles(text):
@@ -52,8 +68,8 @@ def tanimoto(s1, s2):
     try:
         mol1 = Chem.MolFromSmiles(s1)
         mol2 = Chem.MolFromSmiles(s2)
-        fp1 = AllChem.GetMorganFingerprintAsBitVect(mol1, 2, nBits=2048)
-        fp2 = AllChem.GetMorganFingerprintAsBitVect(mol2, 2, nBits=2048)
+        fp1 = get_morgan_fp(mol1)
+        fp2 = get_morgan_fp(mol2)
         return DataStructs.TanimotoSimilarity(fp1, fp2)
     except (TypeError, ValueError, AttributeError):
         return "Error: Not a valid SMILES string"

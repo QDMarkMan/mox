@@ -84,13 +84,23 @@ class MolxAgent(BaseAgent):
         state["results"] = {}
         
         # ReAct Loop
-        while True:
-            # THINK: Create/update plan
-            state = self.planner.think(state)
+        max_loops = 3  # Safety limit
+        loop_count = 0
+        
+        while loop_count < max_loops:
+            loop_count += 1
             
-            if state.get("error"):
-                console.print(f"[red]Planning failed: {state['error']}[/]")
-                break
+            # Check if we need to THINK (no pending tasks from OPTIMIZE)
+            tasks = state.get("tasks", {})
+            has_pending = any(t.get("status") == "pending" for t in tasks.values())
+            
+            if not has_pending:
+                # THINK: Create new plan
+                state = self.planner.think(state)
+                
+                if state.get("error"):
+                    console.print(f"[red]Planning failed: {state['error']}[/]")
+                    break
             
             # ACT: Execute all pending tasks
             state = self._execute_tasks(state)
@@ -98,12 +108,29 @@ class MolxAgent(BaseAgent):
             # REFLECT: Evaluate results
             state = self.planner.reflect(state)
             
-            # Check if should continue (OPTIMIZE or stop)
-            if not self.planner.should_continue(state):
+            # Check if should continue
+            reflection = state.get("reflection", {})
+            if reflection.get("success", False):
+                # Success - stop loop
                 break
-                
+            
+            if not reflection.get("should_replan", False):
+                # No replan needed - stop loop
+                break
+            
             # OPTIMIZE: Replan if needed
             state = self.planner.optimize(state)
+            
+            # If optimize created new tasks, continue to ACT
+            # Otherwise, stop
+            tasks = state.get("tasks", {})
+            has_new_pending = any(t.get("status") == "pending" for t in tasks.values())
+            if not has_new_pending:
+                console.print("[yellow]⚠ No new tasks created, stopping[/]")
+                break
+        
+        if loop_count >= max_loops:
+            console.print(f"[yellow]⚠ Reached max iterations ({max_loops}), stopping[/]")
         
         # Generate final response
         state = self._generate_final_response(state)

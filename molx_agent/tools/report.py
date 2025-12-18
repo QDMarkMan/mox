@@ -12,9 +12,12 @@ import logging
 from typing import Any
 
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel, Field
 from rdkit import Chem, DataStructs
 from rdkit.Chem import AllChem, Descriptors, rdMolDescriptors
 from rdkit.Chem.Scaffolds import MurckoScaffold
+
+from molx_agent.tools.utils import get_morgan_fp
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +134,7 @@ class IdentifyActivityCliffs(BaseTool):
                             mols.append({
                                 "smiles": smi,
                                 "activity": float(activity),
-                                "fp": AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=2048),
+                                "fp": get_morgan_fp(mol),
                             })
                         except (ValueError, TypeError):
                             pass
@@ -532,6 +535,155 @@ class GenerateConformationalSAR(BaseTool):
 
 
 # =============================================================================
+# High-Level Report Tools
+# =============================================================================
+
+class RunFullSARAnalysisInput(BaseModel):
+    """Input for RunFullSARAnalysisTool."""
+    compounds: list[dict] = Field(description="List of compound dictionaries with smiles and activity")
+
+
+class RunFullSARAnalysisTool(BaseTool):
+    """Run all SAR analysis tools on compound data."""
+
+    name: str = "run_full_sar_analysis"
+    description: str = (
+        "Run complete SAR analysis suite: R-group analysis, functional groups, "
+        "activity cliffs, conformational analysis. Returns comprehensive SAR results."
+    )
+    args_schema: type[BaseModel] = RunFullSARAnalysisInput
+
+    def _run(self, compounds: list[dict]) -> dict:
+        """Execute all SAR analyses."""
+        from datetime import datetime
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        sar_results = {
+            "total_compounds": len(compounds),
+            "generated_at": datetime.now().isoformat(),
+            "compounds": compounds,
+        }
+
+        data_json = json.dumps(compounds)
+
+        # R-group Analysis
+        try:
+            result = AnalyzeRGroupTable()._run(data_json)
+            sar_results["r_group_analysis"] = json.loads(result)
+        except Exception as e:
+            logger.error(f"R-group analysis error: {e}")
+            sar_results["r_group_analysis"] = {"error": str(e)}
+
+        # Functional Group SAR
+        try:
+            result = GenerateFunctionalGroupSAR()._run(data_json)
+            sar_results["functional_group_sar"] = json.loads(result)
+        except Exception as e:
+            logger.error(f"FG SAR error: {e}")
+            sar_results["functional_group_sar"] = {"error": str(e)}
+
+        # Activity Cliffs
+        try:
+            result = IdentifyActivityCliffs()._run(data_json)
+            sar_results["activity_cliffs"] = json.loads(result)
+        except Exception as e:
+            logger.error(f"Activity cliffs error: {e}")
+            sar_results["activity_cliffs"] = {"error": str(e)}
+
+        # Conformational SAR
+        try:
+            result = GenerateConformationalSAR()._run(data_json)
+            sar_results["conformational_sar"] = json.loads(result)
+        except Exception as e:
+            logger.error(f"Conformational SAR error: {e}")
+            sar_results["conformational_sar"] = {"error": str(e)}
+
+        return sar_results
+
+
+class GenerateHTMLReportInput(BaseModel):
+    """Input for GenerateHTMLReportTool."""
+    sar_results: dict = Field(description="SAR analysis results dictionary")
+    title: str = Field(default="SAR Analysis Report", description="Report title")
+
+
+class GenerateHTMLReportTool(BaseTool):
+    """Generate HTML report from SAR analysis results."""
+
+    name: str = "generate_html_report"
+    description: str = (
+        "Generate an HTML report from SAR analysis results. "
+        "Returns the path to the saved report file."
+    )
+    args_schema: type[BaseModel] = GenerateHTMLReportInput
+
+    def _run(self, sar_results: dict, title: str = "SAR Analysis Report") -> dict:
+        """Generate and save HTML report."""
+        from molx_agent.tools.html_builder import build_sar_html_report, save_html_report
+        
+        html = build_sar_html_report(sar_results, title)
+        report_path = save_html_report(html)
+        
+        return {
+            "report_path": report_path,
+            "title": title,
+            "total_compounds": sar_results.get("total_compounds", 0),
+        }
+
+
+class BuildReportSummaryInput(BaseModel):
+    """Input for BuildReportSummaryTool."""
+    sar_results: dict = Field(description="SAR analysis results")
+    report_path: str = Field(description="Path to generated HTML report")
+
+
+class BuildReportSummaryTool(BaseTool):
+    """Build a text summary of SAR analysis results."""
+
+    name: str = "build_report_summary"
+    description: str = (
+        "Build a markdown summary of SAR analysis findings. "
+        "Returns formatted text summary."
+    )
+    args_schema: type[BaseModel] = BuildReportSummaryInput
+
+    def _run(self, sar_results: dict, report_path: str) -> str:
+        """Build text summary."""
+        summary = "# SAR Analysis Report\n\n"
+        summary += f"**Total Compounds:** {sar_results.get('total_compounds', 0)}\n\n"
+
+        summary += "## Key Findings\n\n"
+
+        # Functional groups
+        fg = sar_results.get("functional_group_sar", {})
+        if fg.get("functional_group_sar"):
+            essential = [
+                f["functional_group"] 
+                for f in fg["functional_group_sar"] 
+                if f.get("effect") == "essential"
+            ]
+            if essential:
+                summary += f"- **Essential Functional Groups:** {', '.join(essential)}\n"
+
+        # Activity cliffs
+        cliffs = sar_results.get("activity_cliffs", {})
+        if cliffs.get("activity_cliffs_found"):
+            summary += f"- **Activity Cliffs:** {cliffs['activity_cliffs_found']} pairs found\n"
+
+        # Conformational
+        conf = sar_results.get("conformational_sar", {})
+        if conf.get("conclusions"):
+            for c in conf["conclusions"]:
+                summary += f"- {c}\n"
+
+        summary += f"\n## Report\n📄 **HTML Report:** `{report_path}`\n"
+
+        return summary
+
+
+# =============================================================================
 # Export
 # =============================================================================
 
@@ -542,9 +694,13 @@ REPORT_TOOLS = [
     GenerateFunctionalGroupSAR,
     GeneratePositionalSAR,
     GenerateConformationalSAR,
+    RunFullSARAnalysisTool,
+    GenerateHTMLReportTool,
+    BuildReportSummaryTool,
 ]
 
 
 def get_report_tools() -> list[BaseTool]:
     """Get all SAR analysis tools."""
     return [tool() for tool in REPORT_TOOLS]
+
