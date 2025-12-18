@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     agent_verbose: bool = False
     agent_max_iterations: int = 10
 
+    # MCP (Model Context Protocol) Configuration
+    MCP_ENABLED: bool = True
+    MCP_SERVERS_CONFIG: Optional[str] = None  # JSON string or path to config file
+
 
 @lru_cache
 def get_settings() -> Settings:

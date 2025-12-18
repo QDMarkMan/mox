@@ -27,10 +27,17 @@ PLANNER_SYSTEM_PROMPT = """You are the Planner of a multi-agent SAR (Structure-A
 
 Your role is to analyze user queries and create a plan of tasks (DAG).
 
-## Available Workers:
+## Available Workers (ONLY THESE THREE TYPES ARE ALLOWED):
 - "data_cleaner": Extract and clean molecular data from files (CSV, Excel, SDF)
-- "sar": SAR analysis (R-group decomposition, scaffold selection)
+- "sar": SAR analysis (R-group decomposition, scaffold selection)  
 - "reporter": Generate HTML reports
+
+IMPORTANT CONSTRAINTS:
+- You MUST ONLY use these exact worker types: "data_cleaner", "sar", "reporter"
+- Do NOT invent new worker types like "dependency_checker", "dependency_installer", "validator", etc.
+- All data extraction, cleaning, and validation should be handled by "data_cleaner"
+- All molecular analysis should be handled by "sar"
+- All report generation should be handled by "reporter"
 
 ## Task Format:
 Return a JSON object with this structure:
@@ -77,10 +84,18 @@ OPTIMIZE_SYSTEM_PROMPT = """You are optimizing a failed or incomplete plan.
 
 Given the original query, previous plan, and the issues encountered, create an improved plan.
 
+IMPORTANT: You can ONLY use these three worker types:
+- "data_cleaner": Extract and clean molecular data from files
+- "sar": SAR analysis (R-group decomposition, scaffold selection)
+- "reporter": Generate HTML reports
+
+Do NOT create tasks with any other type (e.g., "dependency_checker", "validator", etc.).
+If you see errors about "Unknown worker type", remove those invalid tasks and use only valid types.
+
 Consider:
 - What went wrong in the previous attempt?
-- How can the tasks be restructured?
-- Are there alternative approaches?
+- How can the tasks be restructured using ONLY the three valid worker types?
+- Are there alternative approaches within the available workers?
 
 Return a JSON object with the same format as the original plan:
 {

@@ -607,30 +607,110 @@ class GenerateHTMLReportInput(BaseModel):
     """Input for GenerateHTMLReportTool."""
     sar_results: dict = Field(description="SAR analysis results dictionary")
     title: str = Field(default="SAR Analysis Report", description="Report title")
+    generate_visualizations: bool = Field(default=True, description="Whether to generate advanced visualizations")
+    scaffold_smiles: str = Field(default=None, description="Core scaffold SMILES for annotation")
 
 
 class GenerateHTMLReportTool(BaseTool):
-    """Generate HTML report from SAR analysis results."""
+    """Generate HTML report from SAR analysis results with interactive visualizations."""
 
     name: str = "generate_html_report"
     description: str = (
-        "Generate an HTML report from SAR analysis results. "
+        "Generate an HTML report from SAR analysis results with interactive Plotly visualizations. "
         "Returns the path to the saved report file."
     )
     args_schema: type[BaseModel] = GenerateHTMLReportInput
 
-    def _run(self, sar_results: dict, title: str = "SAR Analysis Report") -> dict:
-        """Generate and save HTML report."""
-        from molx_agent.tools.html_builder import build_sar_html_report, save_html_report
+    def _run(
+        self, 
+        sar_results: dict, 
+        title: str = "SAR Analysis Report",
+        generate_visualizations: bool = True,
+        scaffold_smiles: str = None,
+    ) -> dict:
+        """Generate and save HTML report with optional visualizations."""
+        import logging
+        import pandas as pd
+        from molx_agent.tools.html_builder import (
+            build_sar_html_report, 
+            save_html_report,
+            build_advanced_sar_section,
+        )
         
+        logger = logging.getLogger(__name__)
+        vis_results = {}
+        
+        # Generate advanced visualizations if requested
+        if generate_visualizations:
+            try:
+                compounds = sar_results.get("compounds", [])
+                if compounds:
+                    logger.info(f"Generating advanced visualizations for {len(compounds)} compounds...")
+                    vis_results = self._generate_visualizations(compounds, scaffold_smiles)
+                    sar_results["visualizations"] = vis_results
+            except Exception as e:
+                logger.error(f"Visualization generation error: {e}")
+        
+        # Build main HTML report
         html = build_sar_html_report(sar_results, title)
+        
+        # Insert advanced visualizations section before footer
+        if vis_results:
+            adv_section = build_advanced_sar_section(vis_results)
+            # Insert before closing </div></body>
+            html = html.replace(
+                '<div class="footer">',
+                f'{adv_section}<div class="footer">'
+            )
+        
         report_path = save_html_report(html)
         
         return {
             "report_path": report_path,
             "title": title,
             "total_compounds": sar_results.get("total_compounds", 0),
+            "visualizations_generated": len(vis_results),
         }
+    
+    def _generate_visualizations(self, compounds: list, scaffold_smiles: str = None) -> dict:
+        """Generate all SAR visualizations."""
+        import pandas as pd
+        from molx_agent.tools.sar_visyalizer import (
+            SARDataPreprocessor,
+            SARVisualizerAdvanced,
+            SARVisualizerConfig,
+        )
+        
+        # Convert compound list to DataFrame
+        df = pd.DataFrame(compounds)
+        
+        # Rename columns if needed
+        if "activity" in df.columns and "activity_value" not in df.columns:
+            df["activity_value"] = df["activity"]
+        if "activity_unit" not in df.columns:
+            df["activity_unit"] = "nM"  # Default assumption
+        if "compound_id" not in df.columns:
+            df["compound_id"] = [f"Cpd-{i+1}" for i in range(len(df))]
+        
+        # Check for R-group columns from compound data
+        for c in compounds[0].keys() if compounds else []:
+            if c.startswith("R") and c[1:].isdigit():
+                if c not in df.columns:
+                    df[c] = [item.get(c) for item in compounds]
+        
+        # Preprocess data
+        preprocessor = SARDataPreprocessor(df)
+        processed_df = preprocessor.preprocess()
+        
+        # Generate visualizations
+        config = SARVisualizerConfig(min_count=1)
+        visualizer = SARVisualizerAdvanced(processed_df, config)
+        
+        return visualizer.generate_all(
+            scaffold_smiles=scaffold_smiles,
+            position_rules=None,
+            candidate_ids=None,
+        )
 
 
 class BuildReportSummaryInput(BaseModel):

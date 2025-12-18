@@ -110,7 +110,7 @@ def chat(
 
     console.print(
         Panel(
-            "[bold]Interactive SAR Analysis Chat[/]\n\n"
+            "[bold]Interactive Drug Design Agent[/]\n\n"
             "Type your questions to analyze molecules.\n"
             "Commands: [cyan]exit[/], [cyan]quit[/], [cyan]clear[/] (history)",
             title="[cyan]MolxAgent Chat[/]",

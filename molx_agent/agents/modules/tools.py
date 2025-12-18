@@ -71,6 +71,24 @@ def get_all_tools() -> list[BaseTool]:
     except ImportError as e:
         logger.warning(f"Could not import report tools: {e}")
 
+    # Load MCP tools (if enabled and configured)
+    try:
+        from molx_agent.config import get_settings
+        settings = get_settings()
+        
+        if settings.MCP_ENABLED:
+            from molx_agent.agents.modules.mcp import get_mcp_tools
+            mcp_tools = get_mcp_tools()
+            if mcp_tools:
+                tools.extend(mcp_tools)
+                logger.info(f"Loaded MCP tools ({len(mcp_tools)})")
+            else:
+                logger.debug("No MCP tools loaded (no servers configured)")
+    except ImportError as e:
+        logger.debug(f"MCP tools not available: {e}")
+    except Exception as e:
+        logger.warning(f"Failed to load MCP tools: {e}")
+
     logger.info(f"Total tools loaded: {len(tools)}")
     return tools
 

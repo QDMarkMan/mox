@@ -1,0 +1,8 @@
+{
+    "example_math": {
+        "command": "python",
+        "args": ["./examples/example_mcp_server.py"],
+        "transport": "stdio",
+        "env": {}
+    }
+}
