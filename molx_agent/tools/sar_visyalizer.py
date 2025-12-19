@@ -242,6 +242,304 @@ def mol_to_base64_png(smiles: str, width: int = 300, height: int = 200) -> str:
 
 
 # =============================================================================
+# R-Group Highlighting (based on RDKit blog)
+# Reference: https://greglandrum.github.io/rdkit-blog/posts/2021-08-07-rgd-and-highlighting.html
+# =============================================================================
+
+# Colorblind-friendly R-group color palette (Okabe-Ito)
+RGROUP_COLORS = [
+    (230, 159, 0),    # R1: Orange
+    (86, 180, 233),   # R2: Sky Blue
+    (0, 158, 115),    # R3: Teal/Green
+    (240, 228, 66),   # R4: Yellow
+    (0, 114, 178),    # R5: Blue
+    (213, 94, 0),     # R6: Vermillion
+    (204, 121, 167),  # R7: Pink
+]
+
+# Normalize colors to 0-1 range
+RGROUP_COLORS_NORMALIZED = [tuple(c / 255 for c in color) for color in RGROUP_COLORS]
+
+
+class RGroupHighlighter:
+    """Highlight R-groups with distinct colors on molecule structures.
+    
+    Based on the RDKit blog post for R-Group Decomposition and Highlighting.
+    Supports:
+    - Core scaffold alignment
+    - Per-position color coding
+    - Ring filling for aromatic R-groups
+    - SVG output for web embedding
+    """
+    
+    def __init__(self, core_smarts: str = None):
+        """Initialize the highlighter.
+        
+        Args:
+            core_smarts: Optional core scaffold SMARTS/SMILES for alignment.
+        """
+        self.core_smarts = core_smarts
+        self.core_mol = None
+        if core_smarts:
+            self.core_mol = Chem.MolFromSmarts(core_smarts)
+            if self.core_mol is None:
+                self.core_mol = Chem.MolFromSmiles(core_smarts)
+            if self.core_mol:
+                AllChem.Compute2DCoords(self.core_mol)
+    
+    def highlight_molecule_rgroups(
+        self,
+        smiles: str,
+        r_groups: dict,
+        width: int = 300,
+        height: int = 200,
+        fill_rings: bool = True,
+    ) -> str:
+        """Render molecule with R-groups highlighted in distinct colors.
+        
+        Uses a core-based subtraction approach:
+        1. Match core scaffold to identify core atoms
+        2. Atoms NOT in core are R-group atoms
+        3. Group connected non-core atoms into R-group components
+        4. Assign colors based on R-group position labels
+        
+        Args:
+            smiles: SMILES string of the molecule.
+            r_groups: Dict mapping R-group labels (R1, R2...) to SMILES fragments.
+            width, height: Image dimensions.
+            fill_rings: Whether to fill aromatic rings in R-groups.
+        
+        Returns:
+            SVG string with highlighted R-groups.
+        """
+        from collections import defaultdict
+        from rdkit import Geometry
+        from rdkit.Chem import rdDepictor
+        
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                return self._error_svg(width, height, "Invalid SMILES")
+            
+            AllChem.Compute2DCoords(mol)
+            
+            # Align to core if available
+            if self.core_mol:
+                try:
+                    rdDepictor.GenerateDepictionMatching2DStructure(mol, self.core_mol)
+                except:
+                    pass  # Fall back to default coords
+            
+            # Find core atoms using substructure match
+            core_atoms = set()
+            if self.core_mol:
+                match = mol.GetSubstructMatch(self.core_mol)
+                if match:
+                    core_atoms = set(match)
+            
+            # Identify R-group atoms (atoms NOT in core) and group into components
+            all_atoms = set(range(mol.GetNumAtoms()))
+            rgroup_atoms = all_atoms - core_atoms
+            
+            # Find connected components among R-group atoms
+            rgroup_components = self._find_connected_components(mol, rgroup_atoms, core_atoms)
+            
+            # Map R-group labels to color indices based on sorted keys
+            sorted_rgroup_labels = sorted([k for k in r_groups.keys() if k.startswith('R')])
+            label_to_color_idx = {label: i for i, label in enumerate(sorted_rgroup_labels)}
+            
+            # Prepare highlight data
+            highlight_atoms = {}
+            highlight_bonds = {}
+            atom_rads = {}
+            width_mults = {}
+            rings_to_fill = []
+            
+            # Assign colors to components based on which R-position they belong to
+            for comp_idx, (component_atoms, attachment_core_idx) in enumerate(rgroup_components):
+                # Determine which R-group this component belongs to based on position
+                # Use component index as fallback
+                color_idx = comp_idx % len(RGROUP_COLORS_NORMALIZED)
+                
+                # Try to match component to a labeled R-group position
+                if sorted_rgroup_labels and comp_idx < len(sorted_rgroup_labels):
+                    rg_label = sorted_rgroup_labels[comp_idx]
+                    color_idx = label_to_color_idx.get(rg_label, comp_idx) % len(RGROUP_COLORS_NORMALIZED)
+                
+                color = RGROUP_COLORS_NORMALIZED[color_idx]  # Keep as tuple for DrawMolecule
+                
+                for atom_idx in component_atoms:
+                    highlight_atoms[atom_idx] = color
+                    atom_rads[atom_idx] = 0.4
+                
+                # Highlight bonds between R-group atoms in this component
+                for bond in mol.GetBonds():
+                    begin = bond.GetBeginAtomIdx()
+                    end = bond.GetEndAtomIdx()
+                    if begin in component_atoms and end in component_atoms:
+                        highlight_bonds[bond.GetIdx()] = color
+                        width_mults[bond.GetIdx()] = 2
+                
+                # Find rings to fill within this component
+                if fill_rings:
+                    ring_info = mol.GetRingInfo()
+                    for ring in ring_info.AtomRings():
+                        if all(idx in component_atoms for idx in ring):
+                            rings_to_fill.append((list(ring), color))
+            
+            # Create drawer
+            drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+            opts = drawer.drawOptions()
+            opts.bondLineWidth = 1.5
+            opts.useBWAtomPalette()
+            
+            # Prepare highlight lists and color dicts for DrawMolecule
+            highlight_atom_list = list(highlight_atoms.keys())
+            highlight_bond_list = list(highlight_bonds.keys())
+            highlight_atom_colors = {k: v for k, v in highlight_atoms.items()}
+            highlight_bond_colors = {k: v for k, v in highlight_bonds.items()}
+            
+            # First pass: fill rings
+            if fill_rings and rings_to_fill:
+                # Set scale by drawing molecule first
+                drawer.DrawMolecule(
+                    mol, 
+                    highlightAtoms=highlight_atom_list,
+                    highlightBonds=highlight_bond_list,
+                    highlightAtomColors=highlight_atom_colors,
+                    highlightBondColors=highlight_bond_colors
+                )
+                drawer.ClearDrawing()
+                
+                # Draw filled polygons for rings
+                conf = mol.GetConformer()
+                for ring_atoms, color in rings_to_fill:
+                    points = []
+                    for aidx in ring_atoms:
+                        pos = conf.GetAtomPosition(aidx)
+                        points.append(Geometry.Point2D(pos.x, pos.y))
+                    drawer.SetFillPolys(True)
+                    drawer.SetColour(color)
+                    drawer.DrawPolygon(points)
+                
+                opts.clearBackground = False
+            
+            # Final draw with highlights
+            drawer.DrawMolecule(
+                mol,
+                highlightAtoms=highlight_atom_list,
+                highlightBonds=highlight_bond_list,
+                highlightAtomColors=highlight_atom_colors,
+                highlightBondColors=highlight_bond_colors
+            )
+            drawer.FinishDrawing()
+            
+            svg = drawer.GetDrawingText()
+            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
+            
+        except Exception as e:
+            logger.error(f"R-group highlighting error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Fallback to simple rendering
+            return self._simple_render(smiles, width, height)
+    
+    def _find_connected_components(
+        self, 
+        mol, 
+        rgroup_atoms: set, 
+        core_atoms: set
+    ) -> list:
+        """Find connected components among R-group atoms.
+        
+        Returns list of tuples: (set of atom indices, attachment core atom index)
+        Sorted by attachment point index for consistent R-group ordering.
+        """
+        if not rgroup_atoms:
+            return []
+        
+        visited = set()
+        components = []
+        
+        for start_atom in rgroup_atoms:
+            if start_atom in visited:
+                continue
+            
+            # BFS to find connected component
+            component = set()
+            attachment_core_idx = None
+            queue = [start_atom]
+            
+            while queue:
+                atom_idx = queue.pop(0)
+                if atom_idx in visited or atom_idx not in rgroup_atoms:
+                    continue
+                
+                visited.add(atom_idx)
+                component.add(atom_idx)
+                
+                atom = mol.GetAtomWithIdx(atom_idx)
+                for neighbor in atom.GetNeighbors():
+                    n_idx = neighbor.GetIdx()
+                    if n_idx in core_atoms:
+                        # Found attachment point to core
+                        if attachment_core_idx is None:
+                            attachment_core_idx = n_idx
+                    elif n_idx not in visited and n_idx in rgroup_atoms:
+                        queue.append(n_idx)
+            
+            if component:
+                components.append((component, attachment_core_idx or 0))
+        
+        # Sort by attachment point for consistent ordering
+        components.sort(key=lambda x: x[1])
+        
+        return components
+    
+    def _simple_render(self, smiles: str, width: int, height: int) -> str:
+        """Simple molecule rendering without highlighting."""
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                return self._error_svg(width, height, "Invalid")
+            
+            AllChem.Compute2DCoords(mol)
+            drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+            drawer.DrawMolecule(mol)
+            drawer.FinishDrawing()
+            svg = drawer.GetDrawingText()
+            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
+        except:
+            return self._error_svg(width, height, "Error")
+    
+    def _error_svg(self, width: int, height: int, text: str) -> str:
+        """Generate error placeholder SVG."""
+        return f'<svg width="{width}" height="{height}"><rect width="100%" height="100%" fill="#f3f4f6"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">{text}</text></svg>'
+
+
+def render_rgroup_highlighted_molecule(
+    smiles: str,
+    r_groups: dict,
+    core_smarts: str = None,
+    width: int = 300,
+    height: int = 200,
+) -> str:
+    """Convenience function to render a molecule with R-group highlighting.
+    
+    Args:
+        smiles: SMILES of the molecule.
+        r_groups: Dict mapping R-group labels to SMILES fragments.
+        core_smarts: Optional core scaffold for alignment.
+        width, height: Image dimensions.
+    
+    Returns:
+        SVG string.
+    """
+    highlighter = RGroupHighlighter(core_smarts)
+    return highlighter.highlight_molecule_rgroups(smiles, r_groups, width, height)
+
+
+# =============================================================================
 # SAR Visualizer Advanced
 # =============================================================================
 

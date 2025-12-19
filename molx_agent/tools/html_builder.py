@@ -474,60 +474,18 @@ def build_rgroup_decomposition_table_section(
     if not decomposed:
         return ""
     
+    # Import R-group highlighting from sar_visyalizer
+    from molx_agent.tools.sar_visyalizer import (
+        render_rgroup_highlighted_molecule,
+        RGROUP_COLORS_NORMALIZED as RGROUP_COLORS,
+    )
+        
     # Import RDKit for molecule rendering
     from rdkit import Chem
     from rdkit.Chem.Draw import rdMolDraw2D
     from rdkit.Chem import AllChem
-    
-    def _render_mol_with_highlight(smiles: str, core_smarts: str = None, width: int = 140, height: int = 100) -> str:
-        """Render molecule SVG with core scaffold highlighted."""
-        try:
-            mol = Chem.MolFromSmiles(smiles)
-            if mol is None:
-                return f'<svg width="{width}" height="{height}"><rect width="100%" height="100%" fill="#f3f4f6"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="10">Invalid</text></svg>'
-            
-            AllChem.Compute2DCoords(mol)
-            
-            highlight_atoms = []
-            highlight_bonds = []
-            atom_colors = {}
-            bond_colors = {}
-            
-            # Highlight core scaffold if provided
-            if core_smarts:
-                core = Chem.MolFromSmarts(core_smarts)
-                if core is None:
-                    core = Chem.MolFromSmiles(core_smarts)
-                
-                if core:
-                    match = mol.GetSubstructMatch(core)
-                    if match:
-                        highlight_atoms = list(match)
-                        # Get bonds within the match
-                        for bond in mol.GetBonds():
-                            if bond.GetBeginAtomIdx() in match and bond.GetEndAtomIdx() in match:
-                                highlight_bonds.append(bond.GetIdx())
-                        # Color core atoms BRIGHT ORANGE for high visibility
-                        for idx in highlight_atoms:
-                            atom_colors[idx] = (1.0, 0.5, 0.0, 0.7)
-                        for idx in highlight_bonds:
-                            bond_colors[idx] = (1.0, 0.5, 0.0, 0.8)
-            
-            drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
-            drawer.drawOptions().bondLineWidth = 1.5
-            drawer.DrawMolecule(
-                mol,
-                highlightAtoms=highlight_atoms,
-                highlightBonds=highlight_bonds,
-                highlightAtomColors=atom_colors if atom_colors else {},
-                highlightBondColors=bond_colors if bond_colors else {},
-            )
-            drawer.FinishDrawing()
-            svg = drawer.GetDrawingText()
-            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
-        except Exception:
-            return f'<svg width="{width}" height="{height}"><rect width="100%" height="100%" fill="#f3f4f6"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="10">Error</text></svg>'
-    
+
+
     def _render_rgroup(rgroup_smi: str, width: int = 80, height: int = 60) -> str:
         """Render R-group fragment SVG."""
         if not rgroup_smi or rgroup_smi.startswith("[*"):
@@ -607,18 +565,30 @@ def build_rgroup_decomposition_table_section(
     
     html += f'<p style="margin-bottom:1rem;color:var(--text-secondary)">Decomposed <strong>{len(decomposed)}</strong> compounds, identified <strong>{len(r_positions)}</strong> R-group positions.</p>'
     
+    # Add color legend for R-groups
+    if r_positions:
+        html += '<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:center;">'
+        html += '<span style="font-weight:600;color:var(--text-secondary)">R-group colors:</span>'
+        for i, pos in enumerate(sorted(r_positions)):
+            color = RGROUP_COLORS[i % len(RGROUP_COLORS)]
+            rgb = f'rgb({int(color[0]*255)},{int(color[1]*255)},{int(color[2]*255)})'
+            html += f'<span style="display:inline-flex;align-items:center;gap:0.25rem;"><span style="width:16px;height:16px;border-radius:4px;background:{rgb};display:inline-block;"></span><span style="font-size:0.875rem">{pos}</span></span>'
+        html += '</div>'
+    
     # Build table
     html += '<div class="table-container"><table class="rgroup-table">'
     
     # Determine which activity columns to display
     display_activity_cols = activity_columns if activity_columns else []
     
-    # Header
+    # Header with colored R-group labels
     html += '<thead><tr>'
     html += '<th>ID</th>'
-    html += '<th class="mol-cell">Structure (Core Highlighted)</th>'
-    for pos in r_positions:
-        html += f'<th class="rgroup-cell">{pos}</th>'
+    html += '<th class="mol-cell">Structure (R-groups Highlighted)</th>'
+    for i, pos in enumerate(r_positions):
+        color = RGROUP_COLORS[i % len(RGROUP_COLORS)]
+        rgb = f'rgb({int(color[0]*255)},{int(color[1]*255)},{int(color[2]*255)})'
+        html += f'<th class="rgroup-cell" style="border-bottom:3px solid {rgb}">{pos}</th>'
     html += '<th class="activity-cell">Name</th>'
     
     # Add headers for each activity column, or single "Activity" if none specified
@@ -646,7 +616,7 @@ def build_rgroup_decomposition_table_section(
         name = cpd.get("name") or cpd.get("Name") or cpd_id
         r_groups = cpd.get("r_groups", {})
         
-        mol_svg = _render_mol_with_highlight(smiles, scaffold, 140, 100)
+        mol_svg = render_rgroup_highlighted_molecule(smiles, r_groups, scaffold, 300, 200)
         
         html += '<tr>'
         html += f'<td><strong>{cpd_id}</strong></td>'
