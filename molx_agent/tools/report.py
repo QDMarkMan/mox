@@ -1,7 +1,7 @@
 """
 **************************************************************************
-*  @Copyright [2025] Tongfu.E.
-*  @Email etongfu@outlook.com.
+*  @Copyright [2025] Xtalpi Systems.
+*  @Author tongfu.e@xtalpi.com
 *  @Date [2025-12-15].
 *  @Description SAR Analysis Tools - pure analysis logic, returns JSON.
 **************************************************************************

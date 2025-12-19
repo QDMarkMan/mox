@@ -62,7 +62,7 @@ class MolxAgent(BaseAgent):
             Final agent state with results.
         """
         console.print("\n[bold blue]══════════════════════════════════════════════════[/]")
-        console.print("[bold blue]       👋 MolX Agent, how can I help you?       [/]")
+        console.print("[bold blue]       👋 I'm MolX Agent, Let me help you Design!      [/]")
         console.print("[bold blue]══════════════════════════════════════════════════[/]\n")
         
         user_query = state.get("user_query", "")
