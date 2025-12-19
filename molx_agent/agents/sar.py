@@ -226,6 +226,7 @@ class SARAgent(BaseAgent):
                     "name": c.get("name") or c.get("Name") or c.get("compound_id", f"Cpd-{i}"),
                     "smiles": c.get("smiles"),
                     "activity": c.get("activity"),
+                    "activities": c.get("activities", {}),  # Multi-activity support
                     "r_groups": {},
                 }
                 for i, c in enumerate(compounds)
@@ -241,13 +242,16 @@ class SARAgent(BaseAgent):
             smiles_list, scaffold, activities, compound_ids
         )
         
-        # Add name field to decomposed results
+        # Add name and activities dict fields to decomposed results
         if decomposed:
             for i, dec in enumerate(decomposed):
                 # Find the original compound by smiles
                 for j, cpd in enumerate(compounds):
                     if cpd.get("smiles") == dec.get("smiles"):
                         dec["name"] = cpd.get("name") or cpd.get("Name") or dec.get("compound_id", "")
+                        # Copy activities dict for multi-activity table support
+                        if cpd.get("activities"):
+                            dec["activities"] = cpd["activities"]
                         break
             return decomposed
         
@@ -256,11 +260,14 @@ class SARAgent(BaseAgent):
             smiles_list, scaffold, activities, compound_ids
         )
         
-        # Add name field to fallback results
+        # Add name and activities fields to fallback results
         for i, dec in enumerate(fallback):
             for j, cpd in enumerate(compounds):
                 if cpd.get("smiles") == dec.get("smiles"):
                     dec["name"] = cpd.get("name") or cpd.get("Name") or dec.get("compound_id", "")
+                    # Copy activities dict for multi-activity table support
+                    if cpd.get("activities"):
+                        dec["activities"] = cpd["activities"]
                     break
         
         return fallback

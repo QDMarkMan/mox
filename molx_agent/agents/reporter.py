@@ -63,11 +63,16 @@ class ReporterAgent(BaseAgent):
             # Step 1: Get compound data
             sar_agent_results = self._get_sar_agent_results(results)
             
+            # Get activity columns for multi-activity analysis (needed for both branches)
+            activity_cols = self._get_activity_columns(results)
+            if activity_cols:
+                console.print(f"[dim]   Activity columns: {activity_cols}[/]")
+            
             if sar_agent_results:
                 console.print("[dim]   Using SAR Agent analysis results...[/]")
                 compound_data = sar_agent_results.get("compounds", [])
-                # Merge with SAR agent results for more complete data
-                sar_results = self._merge_sar_results(sar_agent_results)
+                # Merge with SAR agent results for more complete data (pass activity_cols)
+                sar_results = self._merge_sar_results(sar_agent_results, activity_cols)
             else:
                 compound_data = self._collect_compounds(results)
                 
@@ -77,12 +82,6 @@ class ReporterAgent(BaseAgent):
                     return state
                 
                 console.print(f"[dim]   Found {len(compound_data)} compounds[/]")
-                
-                # Get activity columns for multi-activity analysis
-                activity_cols = self._get_activity_columns(results)
-                if activity_cols:
-                    console.print(f"[dim]   Activity columns: {activity_cols}[/]")
-                
                 console.print("[dim]   Running SAR analyses via tool...[/]")
                 
                 # Step 2: Run analysis using tool (with multi-activity support)
@@ -90,6 +89,10 @@ class ReporterAgent(BaseAgent):
                     "compounds": compound_data,
                     "activity_columns": activity_cols if activity_cols else None,
                 })
+                
+                # Ensure activity_columns is in sar_results for HTML generation
+                if activity_cols:
+                    sar_results["activity_columns"] = activity_cols
 
             # Step 3: Generate HTML report using tool
             console.print("[dim]   Generating HTML report...[/]")
@@ -141,13 +144,20 @@ class ReporterAgent(BaseAgent):
                     return cols
         return []
 
-    def _merge_sar_results(self, sar_agent_results: dict) -> dict:
+    def _merge_sar_results(self, sar_agent_results: dict, activity_columns: list[str] = None) -> dict:
         """Merge SAR Agent results with additional analyses."""
         compounds = sar_agent_results.get("compounds", [])
         decomposed = sar_agent_results.get("decomposed_compounds", [])
         
-        # Run full analysis on compounds
-        sar_results = self.analysis_tool.invoke({"compounds": compounds})
+        # Run full analysis on compounds with multi-activity support
+        sar_results = self.analysis_tool.invoke({
+            "compounds": compounds,
+            "activity_columns": activity_columns if activity_columns else None,
+        })
+        
+        # Preserve activity_columns in results for HTML generation
+        if activity_columns:
+            sar_results["activity_columns"] = activity_columns
         
         # Merge with SAR agent specific results
         sar_results["scaffold_strategy"] = sar_agent_results.get("scaffold_strategy")
