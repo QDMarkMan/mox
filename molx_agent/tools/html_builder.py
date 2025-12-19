@@ -1235,15 +1235,47 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
     # 1. Summary Stats
     html += build_stats_section(sar_data)
     
+    # 3. Property Analysis (New)
+    if plots.get("prop_act"):
+        html += f'<div class="card"><h2>⚗️ Property-Activity Landscape</h2><img src="{plots["prop_act"]}" style="width:100%;border-radius:0.5rem;"></div>'
+
     # Multi-activity support: add activity selector if multiple columns available
     activity_columns = sar_data.get("activity_columns", [])
     per_activity_results = sar_data.get("per_activity_results", {})
     
+    # =========================================================================
+    # R-Group Decomposition Table - The main "Structure-R-Group-Activity" view
+    # =========================================================================
+    # Always render R-Group table with all activities (unified view)
+    if "r_group_analysis" in sar_data:
+        # Insert Heatmap and Distribution before the table
+        if plots.get("pos_heatmap") or plots.get("act_dist"):
+            html += '<div class="card"><h2>🧪 R-Group SAR Visualization</h2><div class="mol-grid" style="grid-template-columns: 1fr 1fr;">'
+            if plots.get("pos_heatmap"):
+                html += f'<div><img src="{plots["pos_heatmap"]}" style="width:100%;border-radius:0.5rem;"></div>'
+            if plots.get("act_dist"):
+                html += f'<div><img src="{plots["act_dist"]}" style="width:100%;border-radius:0.5rem;"></div>'
+            html += '</div></div>'
+            
+        # R-Group decomposition table shows all activity columns together
+        html += build_rgroup_decomposition_table_section(
+            sar_data["r_group_analysis"],
+            sar_data.get("scaffold"),
+            sar_data.get("scaffold_strategy"),
+            activity_columns,  # Pass all activity columns for multi-column display
+        )
+        # R-group summary statistics
+        html += build_rgroup_section(sar_data["r_group_analysis"])
+
+    # =========================================================================
+    # SAR Analysis Sections - Activity-specific analyses below the main table
+    # =========================================================================
+    
     if activity_columns and len(activity_columns) > 1:
-        # Add activity selector UI
+        # Multi-activity mode: add activity selector and per-activity analysis cards
         html += build_activity_selector(activity_columns)
         
-        # Render per-activity sections
+        # Render per-activity SAR analysis sections with switching
         for i, col in enumerate(activity_columns):
             col_results = per_activity_results.get(col, {})
             is_first = (i == 0)
@@ -1252,48 +1284,16 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
             html += f'<div class="activity-section {active_class}" data-activity="{col}">'
             html += f'<div class="card"><h2>📊 SAR Analysis: {col}</h2></div>'
             
-            # Render this activity's sections
+            # Render this activity's analysis sections (functional groups, cliffs, etc.)
             html += _build_activity_sections(col_results, plots)
             
             html += '</div>'
         
-        # Add JavaScript for switching
+        # Add JavaScript for switching between activity analyses
         html += build_activity_switching_js()
-    
-    # For both single and multi-activity: always render common sections
-    # The following sections are always shown (not per-activity specific)
-    
-    # Pass the raw tool output to each section builder
-    # Each tool returns a dict that the section builder knows how to parse
-    
-    # Add R-group decomposition table with molecule visualization
-    
-    # 3. Property Analysis (New)
-    if plots.get("prop_act"):
-        html += f'<div class="card"><h2>⚗️ Property-Activity Landscape</h2><img src="{plots["prop_act"]}" style="width:100%;border-radius:0.5rem;"></div>'
-
-    # Single activity mode: render analysis sections directly
-    # (In multi-activity mode, these are rendered per activity above)
-    if not (activity_columns and len(activity_columns) > 1):
-        # 4. R-Group Analysis (Enhanced)
-        if "r_group_analysis" in sar_data:
-            # Insert Heatmap and Distribution before the table
-            if plots.get("pos_heatmap") or plots.get("act_dist"):
-                html += '<div class="card"><h2>🧪 R-Group SAR Visualization</h2><div class="mol-grid" style="grid-template-columns: 1fr 1fr;">'
-                if plots.get("pos_heatmap"):
-                    html += f'<div><img src="{plots["pos_heatmap"]}" style="width:100%;border-radius:0.5rem;"></div>'
-                if plots.get("act_dist"):
-                    html += f'<div><img src="{plots["act_dist"]}" style="width:100%;border-radius:0.5rem;"></div>'
-                html += '</div></div>'
-                
-            html += build_rgroup_decomposition_table_section(
-                sar_data["r_group_analysis"],
-                sar_data.get("scaffold"),
-                sar_data.get("scaffold_strategy"),
-                sar_data.get("activity_columns", []),
-            )
-            html += build_rgroup_section(sar_data["r_group_analysis"])
-
+    else:
+        # Single activity mode: render analysis sections directly
+        
         # 5. Functional Groups (Enhanced)
         if "functional_group_sar" in sar_data:
             if plots.get("fg_matrix"):
