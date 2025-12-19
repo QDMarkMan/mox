@@ -793,6 +793,110 @@ def identify_ocat_series(decomposed_compounds: list[dict]) -> list[dict]:
     return ocat_series
 
 
+def analyze_activity_cliff_pair(
+    smi1: str,
+    smi2: str,
+    activity1: float = None,
+    activity2: float = None,
+    mcs_timeout: int = 2,
+) -> dict:
+    """Analyze structural differences between an activity cliff pair using MCS.
+    
+    Finds the Maximum Common Substructure (MCS) between two molecules and
+    identifies atoms NOT in MCS - these are the key structural differences
+    causing the activity cliff.
+    
+    Args:
+        smi1: SMILES of first molecule.
+        smi2: SMILES of second molecule.
+        activity1: Activity value of first molecule (optional).
+        activity2: Activity value of second molecule (optional).
+        mcs_timeout: Timeout in seconds for MCS calculation.
+    
+    Returns:
+        Dict containing:
+        - mol1, mol2: RDKit Mol objects (or None if invalid)
+        - diff_atoms1, diff_atoms2: Lists of atom indices NOT in MCS
+        - mcs_smarts: SMARTS pattern of MCS (or None)
+        - mcs_num_atoms: Number of atoms in MCS
+        - delta_activity: Difference in activity (activity2 - activity1)
+        - fold_change: Fold change in activity
+        - valid: Whether analysis succeeded
+    """
+    result = {
+        "mol1": None,
+        "mol2": None,
+        "diff_atoms1": [],
+        "diff_atoms2": [],
+        "mcs_smarts": None,
+        "mcs_num_atoms": 0,
+        "delta_activity": None,
+        "fold_change": None,
+        "valid": False,
+    }
+    
+    # Parse molecules
+    mol1 = Chem.MolFromSmiles(smi1)
+    mol2 = Chem.MolFromSmiles(smi2)
+    
+    if mol1 is None or mol2 is None:
+        logger.warning(f"Invalid SMILES in cliff pair: {smi1}, {smi2}")
+        return result
+    
+    result["mol1"] = mol1
+    result["mol2"] = mol2
+    
+    # Calculate activity metrics
+    if activity1 is not None and activity2 is not None:
+        result["delta_activity"] = round(activity2 - activity1, 4)
+        if min(activity1, activity2) > 0:
+            result["fold_change"] = round(max(activity1, activity2) / min(activity1, activity2), 2)
+    
+    try:
+        # Find Maximum Common Substructure
+        mcs_result = rdFMCS.FindMCS(
+            [mol1, mol2],
+            timeout=mcs_timeout,
+            completeRingsOnly=True,
+            bondCompare=rdFMCS.BondCompare.CompareOrder,
+            atomCompare=rdFMCS.AtomCompare.CompareElements,
+        )
+        
+        if mcs_result.canceled or mcs_result.numAtoms < 3:
+            # MCS too small or timed out
+            logger.debug(f"MCS too small or canceled: {mcs_result.numAtoms} atoms")
+            result["valid"] = True  # Still valid, just no MCS highlighting
+            return result
+        
+        mcs_smarts = mcs_result.smartsString
+        mcs_mol = Chem.MolFromSmarts(mcs_smarts)
+        
+        if mcs_mol is None:
+            result["valid"] = True
+            return result
+        
+        result["mcs_smarts"] = mcs_smarts
+        result["mcs_num_atoms"] = mcs_result.numAtoms
+        
+        # Find atoms that are in MCS for each molecule
+        match1 = mol1.GetSubstructMatch(mcs_mol)
+        match2 = mol2.GetSubstructMatch(mcs_mol)
+        
+        # Atoms NOT in MCS are the "different" atoms (R-group/modification sites)
+        all_atoms1 = set(range(mol1.GetNumAtoms()))
+        all_atoms2 = set(range(mol2.GetNumAtoms()))
+        
+        result["diff_atoms1"] = list(all_atoms1 - set(match1))
+        result["diff_atoms2"] = list(all_atoms2 - set(match2))
+        result["valid"] = True
+        
+    except Exception as e:
+        logger.error(f"MCS analysis failed: {e}")
+        result["valid"] = True  # Return valid=True so rendering can proceed without highlights
+    
+    return result
+
+
 # =============================================================================
 # Export all tools
 # =============================================================================

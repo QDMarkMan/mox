@@ -139,15 +139,15 @@ class IdentifyActivityCliffs(BaseTool):
                         except (ValueError, TypeError):
                             pass
 
-            # Find cliffs
+            # Find cliffs (lowered thresholds for better coverage)
             cliffs = []
             for i in range(len(mols)):
                 for j in range(i + 1, len(mols)):
                     sim = DataStructs.TanimotoSimilarity(mols[i]["fp"], mols[j]["fp"])
-                    if sim > 0.7:
+                    if sim >= 0.5:  # Lowered from 0.7 for better coverage
                         a1, a2 = mols[i]["activity"], mols[j]["activity"]
                         fold_change = max(a1 / a2, a2 / a1) if min(a1, a2) > 0 else 0
-                        if fold_change >= 10:
+                        if fold_change >= 3:  # Lowered from 10 for meaningful activity differences
                             cliffs.append({
                                 "mol1": mols[i]["smiles"],
                                 "mol2": mols[j]["smiles"],

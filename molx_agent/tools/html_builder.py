@@ -375,6 +375,72 @@ tr:hover td { background: var(--background); }
 .activity-section[data-activity].active {
     display: block;
 }
+
+/* Activity Cliff Molecule Pair - Horizontal Layout */
+.mol-pair {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    flex-wrap: nowrap;
+}
+
+.mol-pair .mol-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.mol-pair .mol-item .mol-svg {
+    background: white;
+    border-radius: var(--radius);
+    margin-bottom: 0.5rem;
+}
+
+.mol-pair .mol-item .mol-activity {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.mol-pair .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.5rem;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+}
+
+.mol-pair .arrow .fold-change {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--warning);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.mol-pair .cliff-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-left: 1rem;
+    border-left: 1px solid var(--border);
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.mol-pair .cliff-info strong {
+    color: var(--text-strong);
+    font-family: 'JetBrains Mono', monospace;
+}
 """
 
 
@@ -953,29 +1019,26 @@ def build_conformational_section(conf_data: dict) -> str:
 
 
 def build_activity_cliffs_section(cliffs_data: dict) -> str:
-    """Build activity cliffs section with molecule SVGs."""
+    """Build activity cliffs section with molecule SVGs highlighting key R-group differences.
+    
+    Uses MCS-based analysis from sar.py and rendering from sar_visyalizer.py
+    to identify and highlight structural differences between activity cliff pairs.
+    
+    This function focuses on HTML layout - analysis and rendering are delegated
+    to proper utility modules for separation of concerns.
+    """
     if not cliffs_data or "error" in cliffs_data:
         return ""
 
-    # Import at function level to avoid circular imports
-    from rdkit import Chem
-    from rdkit.Chem.Draw import rdMolDraw2D
-    from rdkit.Chem import AllChem
+    # Import analysis and rendering functions (avoid circular imports)
+    from molx_agent.tools.sar import analyze_activity_cliff_pair
+    from molx_agent.tools.sar_visyalizer import (
+        render_activity_cliff_pair_svg,
+        get_cliff_diff_color_hex,
+    )
     
-    def _cliff_smiles_to_svg(smiles: str, width: int = 180, height: int = 140) -> str:
-        try:
-            mol = Chem.MolFromSmiles(smiles)
-            if mol is None:
-                return f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Invalid</text></svg>'
-            AllChem.Compute2DCoords(mol)
-            drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
-            drawer.drawOptions().bondLineWidth = 2.0
-            drawer.DrawMolecule(mol)
-            drawer.FinishDrawing()
-            svg = drawer.GetDrawingText()
-            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
-        except Exception:
-            return f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Error</text></svg>'
+    # Get color for legend
+    DIFF_COLOR_HEX = get_cliff_diff_color_hex()
 
     # Handle both direct list and dict with "cliffs" key
     if isinstance(cliffs_data, list):
@@ -986,10 +1049,17 @@ def build_activity_cliffs_section(cliffs_data: dict) -> str:
         count = cliffs_data.get("activity_cliffs_found", 0)
 
     html = f'<div class="card"><h2>Activity Cliffs</h2>'
-    html += f'<p>Found <strong>{count}</strong> pairs of activity cliffs (Similarity &gt; 0.7, Activity Diff &gt; 10x)</p>'
+    html += f'<p>Found <strong>{count}</strong> pairs of activity cliffs (Similarity &gt;= 0.5, Activity Diff &gt;= 3x)</p>'
+    
+    # Add legend for highlighting
+    html += f'''
+    <div style="display:flex;align-items:center;gap:0.5rem;margin:0.75rem 0;padding:0.5rem;background:#f8fafc;border-radius:6px;font-size:0.875rem;">
+        <span style="display:inline-block;width:14px;height:14px;background:{DIFF_COLOR_HEX};border-radius:3px;"></span>
+        <span style="color:#64748b;">Highlighted regions indicate key structural differences (R-group sites)</span>
+    </div>'''
 
     if cliffs:
-        # Show visual comparison for top cliffs
+        # Show visual comparison for top cliffs with highlighted differences
         html += '<h3>Structural Comparison</h3>'
         for cliff in cliffs[:5]:
             smi1 = cliff.get('mol1', '')
@@ -999,22 +1069,43 @@ def build_activity_cliffs_section(cliffs_data: dict) -> str:
             fold = cliff.get('fold_change', 'N/A')
             sim = cliff.get('similarity', 'N/A')
             
-            svg1 = _cliff_smiles_to_svg(smi1, width=180, height=140)
-            svg2 = _cliff_smiles_to_svg(smi2, width=180, height=140)
+            # Analyze structural differences using MCS
+            analysis = analyze_activity_cliff_pair(smi1, smi2, act1, act2)
+            
+            # Render molecules with highlighted differences
+            svg1, svg2 = render_activity_cliff_pair_svg(
+                analysis["mol1"], 
+                analysis["mol2"],
+                analysis["diff_atoms1"],
+                analysis["diff_atoms2"],
+                width=200, 
+                height=160
+            )
+            
+            # Count differing atoms for insight
+            diff_info = ""
+            diff1 = analysis.get("diff_atoms1", [])
+            diff2 = analysis.get("diff_atoms2", [])
+            if diff1 or diff2:
+                diff_info = f'<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.25rem;">Δ atoms: {len(diff1)} vs {len(diff2)}</div>'
             
             html += f'''
             <div class="mol-pair">
-                <div style="text-align:center">
+                <div class="mol-item">
                     <div class="mol-svg">{svg1}</div>
-                    <div style="font-size:0.875rem;margin-top:0.5rem">Activity: <strong>{act1}</strong></div>
+                    <div class="mol-activity">Activity: {act1}</div>
                 </div>
-                <div class="arrow">↔️<br><span style="font-size:0.75rem">{fold}x</span></div>
-                <div style="text-align:center">
+                <div class="arrow">
+                    <span>↔️</span>
+                    <span class="fold-change">{fold}x</span>
+                </div>
+                <div class="mol-item">
                     <div class="mol-svg">{svg2}</div>
-                    <div style="font-size:0.875rem;margin-top:0.5rem">Activity: <strong>{act2}</strong></div>
+                    <div class="mol-activity">Activity: {act2}</div>
                 </div>
-                <div style="font-size:0.75rem;color:var(--text-secondary)">
-                    Similarity: {sim}
+                <div class="cliff-info">
+                    <span>Similarity: <strong>{sim}</strong></span>
+                    <span>Δ atoms: <strong>{len(diff1)} vs {len(diff2)}</strong></span>
                 </div>
             </div>'''
 
@@ -1051,7 +1142,7 @@ def build_activity_cliffs_section(cliffs_data: dict) -> str:
         html += '</tbody></table></div>'
 
         if count > 0:
-            html += '<div class="conclusion"><strong>Insight:</strong> Small structural changes leading to large activity differences indicate critical SAR regions.</div>'
+            html += '<div class="conclusion"><strong>Insight:</strong> Small structural changes leading to large activity differences indicate critical SAR regions. Orange-highlighted atoms show the key R-group modifications.</div>'
 
     html += '</div>'
     return html

@@ -263,6 +263,97 @@ RGROUP_COLORS = [
 # Normalize colors to 0-1 range
 RGROUP_COLORS_NORMALIZED = [tuple(c / 255 for c in color) for color in RGROUP_COLORS]
 
+# Color for activity cliff difference highlighting (Orange - matches first R-group)
+CLIFF_DIFF_COLOR = (230/255, 159/255, 0/255)  # Orange (Okabe-Ito)
+CLIFF_DIFF_COLOR_HEX = "#E69F00"
+
+
+def render_activity_cliff_pair_svg(
+    mol1,
+    mol2,
+    diff_atoms1: list = None,
+    diff_atoms2: list = None,
+    width: int = 200,
+    height: int = 160,
+) -> tuple:
+    """Render activity cliff molecule pair with highlighted structural differences.
+    
+    Takes pre-analyzed mol objects and diff atom indices from analyze_activity_cliff_pair()
+    and renders both molecules as SVGs with highlighted differences.
+    
+    Args:
+        mol1: RDKit Mol object for first molecule (or None).
+        mol2: RDKit Mol object for second molecule (or None).
+        diff_atoms1: List of atom indices to highlight in mol1 (structural differences).
+        diff_atoms2: List of atom indices to highlight in mol2 (structural differences).
+        width, height: SVG dimensions.
+    
+    Returns:
+        Tuple of (svg1, svg2) strings. Returns error placeholder SVGs if mols are invalid.
+    """
+    diff_atoms1 = diff_atoms1 or []
+    diff_atoms2 = diff_atoms2 or []
+    
+    def _render_mol_with_diff_highlight(mol, highlight_atoms: list, w: int, h: int) -> str:
+        """Render single molecule with highlighted difference atoms."""
+        if mol is None:
+            return f'<svg width="{w}" height="{h}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Invalid</text></svg>'
+        
+        try:
+            AllChem.Compute2DCoords(mol)
+            
+            drawer = rdMolDraw2D.MolDraw2DSVG(w, h)
+            opts = drawer.drawOptions()
+            opts.bondLineWidth = 2.0
+            
+            if highlight_atoms:
+                # Prepare highlight colors
+                highlight_atom_colors = {idx: CLIFF_DIFF_COLOR for idx in highlight_atoms}
+                
+                # Find bonds between highlighted atoms
+                highlight_bonds = []
+                highlight_bond_colors = {}
+                for bond in mol.GetBonds():
+                    begin = bond.GetBeginAtomIdx()
+                    end = bond.GetEndAtomIdx()
+                    if begin in highlight_atoms and end in highlight_atoms:
+                        highlight_bonds.append(bond.GetIdx())
+                        highlight_bond_colors[bond.GetIdx()] = CLIFF_DIFF_COLOR
+                
+                # Set atom radii for highlighted atoms
+                highlight_radii = {idx: 0.4 for idx in highlight_atoms}
+                
+                drawer.DrawMolecule(
+                    mol,
+                    highlightAtoms=highlight_atoms,
+                    highlightBonds=highlight_bonds,
+                    highlightAtomColors=highlight_atom_colors,
+                    highlightBondColors=highlight_bond_colors,
+                    highlightAtomRadii=highlight_radii,
+                )
+            else:
+                drawer.DrawMolecule(mol)
+            
+            drawer.FinishDrawing()
+            svg = drawer.GetDrawingText()
+            return svg.replace("<?xml version='1.0' encoding='iso-8859-1'?>", "").replace("\n", " ")
+            
+        except Exception as e:
+            logger.error(f"Error rendering molecule with highlights: {e}")
+            return f'<svg width="{w}" height="{h}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f3f4f6" rx="8"/><text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="12">Error</text></svg>'
+    
+    svg1 = _render_mol_with_diff_highlight(mol1, diff_atoms1, width, height)
+    svg2 = _render_mol_with_diff_highlight(mol2, diff_atoms2, width, height)
+    
+    return svg1, svg2
+
+
+def get_cliff_diff_color_hex() -> str:
+    """Get the hex color used for activity cliff difference highlighting."""
+    return CLIFF_DIFF_COLOR_HEX
+
+
+
 
 class RGroupHighlighter:
     """Highlight R-groups with distinct colors on molecule structures.
@@ -1026,14 +1117,41 @@ class SARVisualizerAdvanced:
         
         main_chart_html = self._fig_to_html_div(fig)
         
-        # Generate structure pair gallery for top pairs
+        # Generate structure pair gallery for top pairs with MCS-based highlighting
+        from molx_agent.tools.sar import analyze_activity_cliff_pair
+        
         top_pairs = pairs_df.head(min(5, len(pairs_df)))
         structure_html = '<div style="margin-top:2rem;"><h3>Top Activity Cliff Pairs</h3>'
+        structure_html += f'''
+        <div style="display:flex;align-items:center;gap:0.5rem;margin:0.75rem 0;padding:0.5rem;background:#f8fafc;border-radius:6px;font-size:0.875rem;">
+            <span style="display:inline-block;width:14px;height:14px;background:{CLIFF_DIFF_COLOR_HEX};border-radius:3px;"></span>
+            <span style="color:#64748b;">Highlighted regions indicate key structural differences</span>
+        </div>'''
         structure_html += '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(400px, 1fr));gap:1.5rem;margin-top:1rem;">'
         
         for _, pair in top_pairs.iterrows():
-            svg1 = mol_to_svg(pair["SMILES_1"], width=180, height=140)
-            svg2 = mol_to_svg(pair["SMILES_2"], width=180, height=140)
+            # Use MCS-based analysis to find and highlight structural differences
+            analysis = analyze_activity_cliff_pair(
+                pair["SMILES_1"], 
+                pair["SMILES_2"],
+                pair["pActivity_1"],
+                pair["pActivity_2"]
+            )
+            
+            # Render with highlighted differences
+            svg1, svg2 = render_activity_cliff_pair_svg(
+                analysis["mol1"], 
+                analysis["mol2"],
+                analysis["diff_atoms1"],
+                analysis["diff_atoms2"],
+                width=180, 
+                height=140
+            )
+            
+            # Show diff atom count
+            diff_info = ""
+            if analysis["diff_atoms1"] or analysis["diff_atoms2"]:
+                diff_info = f'<div style="font-size:0.65rem;color:#94a3b8;">Δ atoms: {len(analysis["diff_atoms1"])} vs {len(analysis["diff_atoms2"])}</div>'
             
             structure_html += f'''
             <div style="background:#f8fafc;border-radius:0.5rem;padding:1rem;border:1px solid #e2e8f0;">
@@ -1057,6 +1175,7 @@ class SARVisualizerAdvanced:
                     <span style="background:#f0f9ff;color:#0ea5e9;padding:0.25rem 0.5rem;border-radius:4px;font-size:0.875rem;margin-left:0.5rem;">
                         Similarity: {pair["Similarity"]:.2%}
                     </span>
+                    {diff_info}
                 </div>
             </div>
             '''
