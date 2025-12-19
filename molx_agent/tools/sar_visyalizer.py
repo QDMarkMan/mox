@@ -255,6 +255,9 @@ RGROUP_COLORS = [
     (0, 114, 178),    # R5: Blue
     (213, 94, 0),     # R6: Vermillion
     (204, 121, 167),  # R7: Pink
+    (255, 182, 193),  # R8: Light Red
+    (152, 223, 138),  # R9: Light Green
+    (198, 158, 212),  # R11: Light Purple
 ]
 
 # Normalize colors to 0-1 range
@@ -291,8 +294,8 @@ class RGroupHighlighter:
         self,
         smiles: str,
         r_groups: dict,
-        width: int = 300,
-        height: int = 200,
+        width: int = 248,
+        height: int = 186,
         fill_rings: bool = True,
     ) -> str:
         """Render molecule with R-groups highlighted in distinct colors.
@@ -321,14 +324,31 @@ class RGroupHighlighter:
             if mol is None:
                 return self._error_svg(width, height, "Invalid SMILES")
             
-            AllChem.Compute2DCoords(mol)
-            
-            # Align to core if available
+            # Align to core scaffold for consistent orientation
+            aligned = False
             if self.core_mol:
                 try:
-                    rdDepictor.GenerateDepictionMatching2DStructure(mol, self.core_mol)
-                except:
-                    pass  # Fall back to default coords
+                    # First compute coords for the molecule
+                    AllChem.Compute2DCoords(mol)
+                    
+                    # Check if molecule contains the core substructure
+                    match = mol.GetSubstructMatch(self.core_mol)
+                    if match:
+                        # Use GenerateDepictionMatching2DStructure for alignment
+                        # This aligns the molecule so the core overlaps with core_mol's coords
+                        rdDepictor.GenerateDepictionMatching2DStructure(
+                            mol, 
+                            self.core_mol,
+                            acceptFailure=True,  # Continue even if perfect match fails
+                            allowRGroups=True    # Handle R-group attachment points
+                        )
+                        aligned = True
+                except Exception as align_err:
+                    logger.debug(f"Scaffold alignment failed, using default coords: {align_err}")
+            
+            # Fallback: compute default 2D coords if not aligned
+            if not aligned:
+                AllChem.Compute2DCoords(mol)
             
             # Find core atoms using substructure match
             core_atoms = set()
@@ -341,13 +361,6 @@ class RGroupHighlighter:
             all_atoms = set(range(mol.GetNumAtoms()))
             rgroup_atoms = all_atoms - core_atoms
             
-            # Find connected components among R-group atoms
-            rgroup_components = self._find_connected_components(mol, rgroup_atoms, core_atoms)
-            
-            # Map R-group labels to color indices based on sorted keys
-            sorted_rgroup_labels = sorted([k for k in r_groups.keys() if k.startswith('R')])
-            label_to_color_idx = {label: i for i, label in enumerate(sorted_rgroup_labels)}
-            
             # Prepare highlight data
             highlight_atoms = {}
             highlight_bonds = {}
@@ -355,37 +368,265 @@ class RGroupHighlighter:
             width_mults = {}
             rings_to_fill = []
             
-            # Assign colors to components based on which R-position they belong to
-            for comp_idx, (component_atoms, attachment_core_idx) in enumerate(rgroup_components):
-                # Determine which R-group this component belongs to based on position
-                # Use component index as fallback
-                color_idx = comp_idx % len(RGROUP_COLORS_NORMALIZED)
+            # Map R-group labels to color indices based on sorted keys
+            sorted_rgroup_labels = sorted([k for k in r_groups.keys() if k.startswith('R')])
+            label_to_color_idx = {label: i for i, label in enumerate(sorted_rgroup_labels)}
+            
+            import re
+            
+            def clean_rgroup_smiles(rg_smiles: str) -> str:
+                """Clean R-group SMILES by removing attachment point markers.
                 
-                # Try to match component to a labeled R-group position
-                if sorted_rgroup_labels and comp_idx < len(sorted_rgroup_labels):
-                    rg_label = sorted_rgroup_labels[comp_idx]
-                    color_idx = label_to_color_idx.get(rg_label, comp_idx) % len(RGROUP_COLORS_NORMALIZED)
+                This is a more robust version that handles complex cases like:
+                - [*:4]S(=O)(=O)N (sulfonamides)
+                - [*:4]C1CCC(O)CC1 (cyclohexanol)
+                """
+                if not rg_smiles:
+                    return ""
                 
-                color = RGROUP_COLORS_NORMALIZED[color_idx]  # Keep as tuple for DrawMolecule
+                original = rg_smiles
                 
-                for atom_idx in component_atoms:
+                # Strategy 1: Replace [*:n] with a placeholder that maintains valence
+                # Use [#0] (atomic number 0) which acts like a dummy/wildcard
+                cleaned = re.sub(r'\[\*:\d+\]', '[*]', rg_smiles)
+                
+                # Strategy 2: Try to remove dummy atoms more carefully
+                # If the dummy is at the start with a bond character after
+                if cleaned.startswith('[*]'):
+                    cleaned = cleaned[3:]  # Remove [*]
+                    # Remove leading bond symbols
+                    cleaned = cleaned.lstrip('-=')
+                
+                # If dummy is inside parentheses at start like ([*])
+                cleaned = re.sub(r'^\(\[\*\]\)', '', cleaned)
+                cleaned = re.sub(r'\(\[\*\]\)$', '', cleaned)
+                
+                # Remove [*] with surrounding bonds
+                cleaned = re.sub(r'\[\*\]-?', '', cleaned)
+                cleaned = re.sub(r'-?\[\*\]', '', cleaned)
+                
+                # Clean up double bonds and empty parentheses
+                cleaned = re.sub(r'\(\)', '', cleaned)
+                cleaned = re.sub(r'^-', '', cleaned)  # Remove leading dash
+                cleaned = re.sub(r'-$', '', cleaned)  # Remove trailing dash
+                
+                # Handle nested empty parens
+                while '()' in cleaned:
+                    cleaned = cleaned.replace('()', '')
+                
+                # Strip outer parentheses if they wrap the whole thing
+                if cleaned.startswith('(') and cleaned.endswith(')'):
+                    # Check if it's balanced
+                    depth = 0
+                    balanced = True
+                    for i, c in enumerate(cleaned):
+                        if c == '(':
+                            depth += 1
+                        elif c == ')':
+                            depth -= 1
+                        if depth == 0 and i < len(cleaned) - 1:
+                            balanced = False
+                            break
+                    if balanced and depth == 0:
+                        cleaned = cleaned[1:-1]
+                
+                return cleaned.strip()
+            
+            def try_parse_rgroup(rg_smiles: str):
+                """Try multiple strategies to parse R-group SMILES."""
+                if not rg_smiles:
+                    return None
+                
+                # Strategy 1: Clean and parse as SMILES
+                clean = clean_rgroup_smiles(rg_smiles)
+                if clean:
+                    mol = Chem.MolFromSmiles(clean)
+                    if mol:
+                        return mol
+                
+                # Strategy 2: Try parsing with dummy as wildcard [#0]
+                with_wildcard = re.sub(r'\[\*:\d+\]', '[#0]', rg_smiles)
+                with_wildcard = re.sub(r'\[\*\]', '[#0]', with_wildcard)
+                mol = Chem.MolFromSmiles(with_wildcard)
+                if mol:
+                    return mol
+                
+                # Strategy 3: Try as SMARTS
+                if clean:
+                    mol = Chem.MolFromSmarts(clean)
+                    if mol:
+                        return mol
+                
+                # Strategy 4: Try SMARTS with wildcards
+                smarts_pattern = re.sub(r'\[\*:\d+\]', '*', rg_smiles)
+                smarts_pattern = re.sub(r'\[\*\]', '*', smarts_pattern)
+                mol = Chem.MolFromSmarts(smarts_pattern)
+                if mol:
+                    return mol
+                
+                return None
+            
+            # Track which R-group atoms have been assigned
+            assigned_atoms = set()
+            
+            # First, find connected components among non-core atoms for fallback
+            components = self._find_connected_components(mol, rgroup_atoms, core_atoms)
+            
+            # Process each R-group from the input dict
+            for rg_label, rg_smiles in r_groups.items():
+                if not rg_label.startswith('R'):
+                    continue
+                
+                # Get color for this R-group label
+                if rg_label not in label_to_color_idx:
+                    continue
+                    
+                color_idx = label_to_color_idx[rg_label] % len(RGROUP_COLORS_NORMALIZED)
+                color = RGROUP_COLORS_NORMALIZED[color_idx]
+                
+                # Skip hydrogen and placeholder R-groups
+                if not rg_smiles:
+                    continue
+                if rg_smiles in ['[H]', 'H', '[*:1][H]', '[*:2][H]', '[*:3][H]', '[*:4][H]']:
+                    continue
+                if rg_smiles.startswith('[*') and rg_smiles.endswith('[H]'):
+                    continue
+                    
+                # Clean the SMILES
+                clean_smiles = clean_rgroup_smiles(rg_smiles)
+                
+                if not clean_smiles or clean_smiles in ['', 'H', '[H]']:
+                    continue
+                
+                # Try to parse the R-group SMILES using multiple strategies
+                frag_mol = try_parse_rgroup(rg_smiles)
+                    
+                if frag_mol is None:
+                    logger.debug(f"Could not parse R-group {rg_label}: {rg_smiles} -> {clean_smiles}")
+                    # Fallback: try to find a connected component with matching atom count
+                    frag_atoms = None
+                    clean_mol = Chem.MolFromSmiles(clean_smiles) if clean_smiles else None
+                    if clean_mol:
+                        target_atoms = clean_mol.GetNumHeavyAtoms()
+                        for comp_atoms, attach_idx in components:
+                            if len(comp_atoms) == target_atoms and not any(a in assigned_atoms for a in comp_atoms):
+                                frag_atoms = comp_atoms
+                                break
+                    
+                    if frag_atoms:
+                        for atom_idx in frag_atoms:
+                            highlight_atoms[atom_idx] = color
+                            atom_rads[atom_idx] = 0.4
+                            assigned_atoms.add(atom_idx)
+                        
+                        # Highlight bonds
+                        for bond in mol.GetBonds():
+                            begin = bond.GetBeginAtomIdx()
+                            end = bond.GetEndAtomIdx()
+                            if begin in frag_atoms and end in frag_atoms:
+                                highlight_bonds[bond.GetIdx()] = color
+                                width_mults[bond.GetIdx()] = 2
+                        
+                        if fill_rings:
+                            ring_info = mol.GetRingInfo()
+                            for ring in ring_info.AtomRings():
+                                if all(idx in frag_atoms for idx in ring):
+                                    rings_to_fill.append((list(ring), color))
+                    continue
+                
+                # Find matches in the molecule
+                matched = False
+                try:
+                    matches = mol.GetSubstructMatches(frag_mol, uniquify=True)
+                except:
+                    matches = []
+                
+                # Find the first match that is in R-group atoms (not core) and not yet assigned
+                for match in matches:
+                    # Only consider atoms that are NOT in the core (excluding dummy atoms)
+                    rg_match_atoms = [idx for idx in match 
+                                     if idx not in core_atoms 
+                                     and mol.GetAtomWithIdx(idx).GetAtomicNum() != 0]
+                    
+                    if not rg_match_atoms:
+                        continue
+                    
+                    # Check if any of these atoms are already assigned to another R-group
+                    if any(idx in assigned_atoms for idx in rg_match_atoms):
+                        continue
+                    
+                    # Expand to include all connected non-core atoms
+                    expanded_atoms = set(rg_match_atoms)
+                    changed = True
+                    while changed:
+                        changed = False
+                        for atom_idx in list(expanded_atoms):
+                            atom = mol.GetAtomWithIdx(atom_idx)
+                            for neighbor in atom.GetNeighbors():
+                                n_idx = neighbor.GetIdx()
+                                if n_idx not in core_atoms and n_idx not in expanded_atoms and n_idx not in assigned_atoms:
+                                    expanded_atoms.add(n_idx)
+                                    changed = True
+                    
+                    # Assign these atoms to this R-group
+                    for atom_idx in expanded_atoms:
+                        highlight_atoms[atom_idx] = color
+                        atom_rads[atom_idx] = 0.4
+                        assigned_atoms.add(atom_idx)
+                    
+                    # Highlight bonds between these atoms
+                    for bond in mol.GetBonds():
+                        begin = bond.GetBeginAtomIdx()
+                        end = bond.GetEndAtomIdx()
+                        if begin in expanded_atoms and end in expanded_atoms:
+                            highlight_bonds[bond.GetIdx()] = color
+                            width_mults[bond.GetIdx()] = 2
+                    
+                    # Fill rings within this R-group
+                    if fill_rings:
+                        ring_info = mol.GetRingInfo()
+                        for ring in ring_info.AtomRings():
+                            if all(idx in expanded_atoms for idx in ring):
+                                rings_to_fill.append((list(ring), color))
+                    
+                    matched = True
+                    break
+                
+                # If no substructure match found, try connected component fallback
+                if not matched:
+                    # Find an unassigned component with similar size
+                    target_atoms = frag_mol.GetNumHeavyAtoms()
+                    for comp_atoms, attach_idx in components:
+                        if not any(a in assigned_atoms for a in comp_atoms):
+                            # Accept if size is close (within 2 atoms) or exact match
+                            if abs(len(comp_atoms) - target_atoms) <= 2:
+                                for atom_idx in comp_atoms:
+                                    highlight_atoms[atom_idx] = color
+                                    atom_rads[atom_idx] = 0.4
+                                    assigned_atoms.add(atom_idx)
+                                
+                                for bond in mol.GetBonds():
+                                    begin = bond.GetBeginAtomIdx()
+                                    end = bond.GetEndAtomIdx()
+                                    if begin in comp_atoms and end in comp_atoms:
+                                        highlight_bonds[bond.GetIdx()] = color
+                                        width_mults[bond.GetIdx()] = 2
+                                
+                                if fill_rings:
+                                    ring_info = mol.GetRingInfo()
+                                    for ring in ring_info.AtomRings():
+                                        if all(idx in comp_atoms for idx in ring):
+                                            rings_to_fill.append((list(ring), color))
+                                break
+            
+            # Fallback: highlight remaining unassigned non-core atoms with a default color
+            unassigned = rgroup_atoms - assigned_atoms
+            if unassigned and not highlight_atoms:
+                # If nothing was matched, highlight all non-core atoms
+                color = RGROUP_COLORS_NORMALIZED[0]
+                for atom_idx in rgroup_atoms:
                     highlight_atoms[atom_idx] = color
                     atom_rads[atom_idx] = 0.4
-                
-                # Highlight bonds between R-group atoms in this component
-                for bond in mol.GetBonds():
-                    begin = bond.GetBeginAtomIdx()
-                    end = bond.GetEndAtomIdx()
-                    if begin in component_atoms and end in component_atoms:
-                        highlight_bonds[bond.GetIdx()] = color
-                        width_mults[bond.GetIdx()] = 2
-                
-                # Find rings to fill within this component
-                if fill_rings:
-                    ring_info = mol.GetRingInfo()
-                    for ring in ring_info.AtomRings():
-                        if all(idx in component_atoms for idx in ring):
-                            rings_to_fill.append((list(ring), color))
             
             # Create drawer
             drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
