@@ -1,4 +1,4 @@
-# molx-agent design
+# molx-agent POC design
 
 一套可落地的 **LangGraph 拓扑设计 + 关键代码骨架**，你可以在此基础上往里填具体工具调用（PubMed / RDKit / AlphaFold 等）。
 

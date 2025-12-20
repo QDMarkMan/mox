@@ -69,6 +69,9 @@ cleanup:
 	find . | grep -E ".pytest_cache" | xargs rm -rf
 	rm -rf build/
 
+serve:
+	uv run molx-server run
+
 help:
 	@echo "lock                                      Lock the dependencies."
 	@echo "install                                   Install the project dependencies."
