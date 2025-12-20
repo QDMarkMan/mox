@@ -39,6 +39,21 @@ IMPORTANT CONSTRAINTS:
 - All molecular analysis should be handled by "sar"
 - All report generation should be handled by "reporter"
 
+## Report Intent Detection:
+The reporter supports different analysis modes. Detect user intent and pass it to reporter:
+
+1. **Single-Site Analysis** - User wants to focus on one R-group position:
+   - Keywords: "R1位点", "只看R2", "单一位点", "R1的SAR", "position R1"
+   - Pass: `"inputs": {"report_intent": "single_site", "target_position": "R1"}`
+
+2. **Molecule Subset Analysis** - User wants to analyze specific molecules:
+   - Keywords: "只分析这几个", "Cpd-1, Cpd-2", "比较 X 和 Y"
+   - Pass: `"inputs": {"report_intent": "molecule_subset", "target_molecules": ["Cpd-1", "Cpd-2"]}`
+
+3. **Full Report (default)** - Standard full SAR analysis:
+   - No special keywords, or explicit "完整SAR报告", "full report"
+   - No special inputs needed
+
 ## Task Format:
 Return a JSON object with this structure:
 {
@@ -60,6 +75,7 @@ Return a JSON object with this structure:
 - Typical SAR flow: data_cleaner → sar → reporter
 - Each task should have clear inputs and expected outputs
 - Dependencies define execution order
+- For single-site or subset analysis, include report_intent in reporter task inputs
 """
 
 REFLECT_SYSTEM_PROMPT = """You are evaluating the results of executed tasks.

@@ -10,7 +10,6 @@
 *  2. R-group decomposition approach
 *  3. OCAT (one-change-at-a-time) analysis
 *  
-*  Fixed tools are in molx_agent/tools/sar.py
 **************************************************************************
 """
 
@@ -23,7 +22,6 @@ from molx_agent.agents.modules.state import AgentState
 # Import tools from tools/sar.py
 from molx_agent.tools.sar import (
     find_mcs_scaffold,
-    find_murcko_scaffold,
     find_common_murcko_scaffold,
     decompose_r_groups,
     simple_r_group_assignment,

@@ -793,6 +793,21 @@ def identify_ocat_series(decomposed_compounds: list[dict]) -> list[dict]:
     return ocat_series
 
 
+def filter_ocat_by_position(ocat_pairs: list[dict], position: str) -> list[dict]:
+    """Filter OCAT pairs to only those varying at specified R-group position.
+    
+    This enables single-site SAR analysis by focusing on one R-group.
+    
+    Args:
+        ocat_pairs: List of OCAT pair dictionaries from identify_ocat_series.
+        position: R-group position to filter by (e.g., "R1", "R2").
+    
+    Returns:
+        Filtered list of OCAT pairs where varying_position matches.
+    """
+    return [p for p in ocat_pairs if p.get("varying_position") == position]
+
+
 def analyze_activity_cliff_pair(
     smi1: str,
     smi2: str,
