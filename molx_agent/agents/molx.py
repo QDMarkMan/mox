@@ -281,6 +281,9 @@ class ChatSession:
         
         self.state = self.agent.run(self.state)
         
+        # Store state for streaming access to thinking info
+        self._last_state = self.state
+        
         return self.state.get("final_response", "")
 
     def clear(self):

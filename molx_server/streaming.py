@@ -162,6 +162,8 @@ async def stream_agent_response(
     """
     Stream agent response as SSE events.
 
+    Includes thinking events (intent classification, planning) before the response.
+
     Args:
         session_data: SessionData containing the ChatSession.
         query: User query to process.
@@ -170,13 +172,37 @@ async def stream_agent_response(
     Yields:
         SSE-formatted event strings.
     """
-    queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
     result_holder: list = []
     error_holder: list = []
+    thinking_events: list = []
 
     def run_agent() -> str:
+        """Run agent and capture thinking events."""
         try:
-            result = session_data.chat_session.send(query)
+            # Access chat session
+            chat_session = session_data.chat_session
+            
+            # Capture thinking by running with state access
+            result = chat_session.send(query)
+            
+            # Try to get thinking info from state
+            try:
+                state = getattr(chat_session, '_last_state', None)
+                if state:
+                    intent = state.get('intent')
+                    reasoning = state.get('intent_reasoning', '')
+                    confidence = state.get('intent_confidence', 0)
+                    
+                    if intent and reasoning:
+                        thinking_events.append({
+                            "type": "intent",
+                            "intent": intent.value if hasattr(intent, 'value') else str(intent),
+                            "reasoning": reasoning,
+                            "confidence": confidence,
+                        })
+            except Exception:
+                pass
+            
             result_holder.append(result)
             return result
         except Exception as e:
@@ -186,6 +212,12 @@ async def stream_agent_response(
     # Send initial event
     yield format_sse_event("start", {"query": query})
 
+    # Send thinking placeholder
+    yield format_sse_event("thinking", {
+        "status": "analyzing",
+        "message": "🎯 Analyzing query intent..."
+    })
+
     # Run agent in thread pool
     loop = asyncio.get_event_loop()
 
@@ -193,18 +225,32 @@ async def stream_agent_response(
         # Execute synchronously since ChatSession.send is blocking
         result = await loop.run_in_executor(None, run_agent)
 
-        # Stream the result character by character for demo
-        # (In production, this would be integrated with LLM streaming)
-        for i, char in enumerate(result):
-            yield format_sse_event("token", {"content": char})
+        # Send thinking events if captured
+        for thinking in thinking_events:
+            yield format_sse_event("thinking", {
+                "status": "complete",
+                "intent": thinking.get("intent", ""),
+                "reasoning": thinking.get("reasoning", ""),
+                "confidence": thinking.get("confidence", 0),
+            })
+            await asyncio.sleep(0.05)
+
+        # Stream the result in word/token chunks for better UX
+        words = result.split(' ')
+        
+        for i, word in enumerate(words):
+            token = (' ' + word) if i > 0 else word
+            yield format_sse_event("token", {"content": token})
+            
             if on_token:
-                on_token(char)
-            # Small delay for demonstration
-            if i % 10 == 0:
-                await asyncio.sleep(0.01)
+                on_token(token)
+            
+            await asyncio.sleep(0.02)
 
         yield format_sse_event("complete", {"result": result})
 
     except Exception as e:
         logger.error(f"Streaming error: {e}")
         yield format_sse_event("error", {"message": str(e)})
+
+
