@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { ChatList } from '@/components/chat/chat-list'
+import { SidebarLayout } from '@/components/layout/sidebar-layout'
 import { ChatPanel } from '@/components/chat/chat-panel'
 
 export interface ChatSession {
@@ -35,24 +35,16 @@ export default function App() {
   }, [sessionId])
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      {/* Sidebar */}
-      <div className="w-[280px] shrink-0 border-r border-border bg-muted/30">
-        <ChatList
-          activeId={sessionId}
-          onSelect={setSessionId}
-          sessions={sessions}
-          onDeleteSession={deleteSession}
-        />
-      </div>
-
-      {/* Main Content */}
-      <main className="flex flex-1 flex-col overflow-hidden bg-background">
-        <ChatPanel
-          sessionId={sessionId}
-          onCreateSession={createSession}
-        />
-      </main>
-    </div>
+    <SidebarLayout
+      sessionId={sessionId}
+      onSelectSession={setSessionId}
+      sessions={sessions}
+      onDeleteSession={deleteSession}
+    >
+      <ChatPanel
+        sessionId={sessionId}
+        onCreateSession={createSession}
+      />
+    </SidebarLayout>
   )
 }

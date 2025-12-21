@@ -62,6 +62,7 @@ export interface ChatInputFile {
 }
 
 interface ChatInputProps {
+  rows?: number
   value: string
   onChange: (value: string) => void
   onSubmit: (message: string, files?: ChatInputFile[]) => void
@@ -70,6 +71,7 @@ interface ChatInputProps {
   placeholder?: string
   showQuickActions?: boolean
   variant?: 'default' | 'welcome'
+
 }
 
 export function ChatInput({
@@ -80,7 +82,8 @@ export function ChatInput({
   disabled = false,
   placeholder = 'Give MolX a task, let it plan, call tools, and execute for you...',
   showQuickActions = true,
-  variant = 'default'
+  variant = 'default',
+  rows = 4
 }: ChatInputProps) {
   const [files, setFiles] = useState<ChatInputFile[]>([])
   const [isAgentMode, setIsAgentMode] = useState(true)
@@ -168,7 +171,7 @@ export function ChatInput({
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
             disabled={disabled}
-            rows={4}
+            rows={rows}
             className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {

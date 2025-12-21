@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ChatInput, type ChatInputFile } from './chat-input'
 import { WelcomePage } from './welcome-page'
-import { Bot, User } from 'lucide-react'
-import { cn } from '@/utils'
+import { ChatMessage, ChatMessageLoading } from './chat-message'
 import { useStreamingChat } from '@/hooks/use-streaming-chat'
-import ReactMarkdown from 'react-markdown'
 
 interface ChatPanelProps {
   sessionId: string | null
@@ -77,65 +75,16 @@ export function ChatPanel({ sessionId, onCreateSession }: ChatPanelProps) {
     )
   }
 
-
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4" ref={scrollRef}>
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "flex gap-3 rounded-xl p-3 transition-all",
-                message.role === 'user'
-                  ? "bg-muted/30"
-                  : "bg-background"
-              )}
-            >
-              <div className={cn(
-                "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border shadow-sm",
-                message.role === 'user'
-                  ? "bg-background border-border"
-                  : "bg-primary/10 border-primary/20 text-primary"
-              )}>
-                {message.role === 'user' ? (
-                  <User className="h-4 w-4" />
-                ) : (
-                  <Bot className="h-4 w-4" />
-                )}
-              </div>
-
-              <div className="flex-1 space-y-1 overflow-hidden">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-medium">
-                    {message.role === 'user' ? 'You' : 'MolX Agent'}
-                  </span>
-                </div>
-
-                <div className="prose prose-sm dark:prose-invert max-w-none break-words text-[14px] leading-relaxed">
-                  {message.role === 'assistant' ? (
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                  )}
-                </div>
-              </div>
-            </div>
+            <ChatMessage key={message.id} message={message} />
           ))}
 
-          {isLoading && (
-            <div className="flex gap-4 rounded-xl p-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary shadow-sm">
-                <Bot className="h-5 w-5 animate-pulse" />
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/40" style={{ animationDelay: '0ms' }} />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/40" style={{ animationDelay: '150ms' }} />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/40" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-          )}
+          {isLoading && <ChatMessageLoading />}
         </div>
       </div>
 
