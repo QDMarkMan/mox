@@ -99,6 +99,7 @@ export function ChatPanel({ sessionId, onCreateSession }: ChatPanelProps) {
             disabled={isLoading}
             showQuickActions={false} // Hide quick actions in chat view to keep it clean
             variant="default"
+            rows={2}
           />
           <div className="mt-2 text-center text-xs text-muted-foreground">
             MolX Agent can make mistakes. Please verify important information.

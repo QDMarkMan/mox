@@ -69,8 +69,8 @@ export function AppSidebar({
                   🚀
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">MolX Agent</span>
-                  <span className="text-xs text-muted-foreground">v1.0</span>
+                  <span className="font-semibold text-md">MolX Agent</span>
+                  {/* <span className="text-xs text-muted-foreground">v1.0</span> */}
                 </div>
               </a>
             </SidebarMenuButton>
@@ -213,7 +213,7 @@ export function AppSidebar({
         </SidebarMenu>
         {/* Collapse Toggle */}
         <div className="flex items-center justify-between px-2 pt-2 border-t border-sidebar-border">
-          <span className="text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">Collapse</span>
+          <span className="text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">V1.0</span>
           <SidebarTrigger />
         </div>
       </SidebarFooter>

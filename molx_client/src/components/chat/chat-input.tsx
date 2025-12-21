@@ -1,10 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import {
-  Send,
-  Plus,
-  Trash2,
-  MessageSquare
-} from 'lucide-react'
+import { Send, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/utils'
 
 // Quick action button configuration
@@ -62,16 +57,20 @@ export interface ChatInputFile {
 }
 
 interface ChatInputProps {
-  rows?: number
   value: string
   onChange: (value: string) => void
   onSubmit: (message: string, files?: ChatInputFile[]) => void
   onQuickAction?: (actionId: string) => void
   disabled?: boolean
   placeholder?: string
-  showQuickActions?: boolean
+  // Display configuration
   variant?: 'default' | 'welcome'
-
+  rows?: number
+  // Feature toggles
+  showQuickActions?: boolean
+  showAgentMode?: boolean
+  showKnowledgeBase?: boolean
+  showFileUpload?: boolean
 }
 
 export function ChatInput({
@@ -81,9 +80,12 @@ export function ChatInput({
   onQuickAction,
   disabled = false,
   placeholder = 'Give MolX a task, let it plan, call tools, and execute for you...',
-  showQuickActions = true,
   variant = 'default',
-  rows = 4
+  rows = 1,
+  showQuickActions = false,
+  showAgentMode = false,
+  showKnowledgeBase = false,
+  showFileUpload = true
 }: ChatInputProps) {
   const [files, setFiles] = useState<ChatInputFile[]>([])
   const [isAgentMode, setIsAgentMode] = useState(true)
@@ -91,13 +93,17 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-resize textarea
+  // Computed values based on variant
+  const isWelcome = variant === 'welcome'
+  const textareaRows = isWelcome ? 4 : rows
+
+  // Auto-resize textarea for welcome variant
   useEffect(() => {
-    if (textareaRef.current) {
+    if (textareaRef.current && isWelcome) {
       textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight} px`
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
     }
-  }, [value])
+  }, [value, isWelcome])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files
@@ -130,137 +136,24 @@ export function ChatInput({
     setFiles([])
   }, [value, files, disabled, onSubmit])
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e)
+    }
+  }, [handleSubmit])
+
   const handleQuickActionClick = useCallback((actionId: string) => {
     if (onQuickAction) {
       onQuickAction(actionId)
     }
   }, [onQuickAction])
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  }
+  const canSubmit = (value.trim() || files.length > 0) && !disabled
 
-  // Welcome Variant (Large Text Area)
-  if (variant === 'welcome') {
-    return (
-      <div className="w-full">
-        <div className="relative rounded-xl border border-border/60 bg-muted/30 p-3 shadow-sm transition-all duration-200 focus-within:border-primary/40 focus-within:bg-background focus-within:shadow-md focus-within:shadow-primary/5">
-          {/* Header: Agent Mode Toggle */}
-          <div className="mb-1.5 absolute right-2 flex justify-end">
-            <button
-              onClick={() => setIsAgentMode(!isAgentMode)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                isAgentMode ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300" : "bg-muted text-muted-foreground"
-              )}
-            >
-              <span className="text-sm">🤖</span>
-              <span>AGENT MODE</span>
-              <span className={cn("ml-1 font-bold", isAgentMode ? "opacity-100" : "opacity-50")}>
-                {isAgentMode ? "ON" : "OFF"}
-              </span>
-            </button>
-          </div>
-
-          {/* Text Area */}
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={rows}
-            className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSubmit(e)
-              }
-            }}
-          />
-
-          {/* Footer Actions */}
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <input
-                type="file"
-                multiple
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="group rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title="Attach files"
-              >
-                <Plus className="h-4 w-4 transition-transform group-hover:rotate-90" />
-              </button>
-
-              {/* File Previews */}
-              {files.length > 0 && (
-                <div className="flex gap-1 overflow-x-auto">
-                  {files.map((file, i) => (
-                    <div key={i} className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[10px]">
-                      <span className="max-w-[80px] truncate">{file.name}</span>
-                      <button onClick={() => removeFile(file.id)} className="text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {/* <button className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                <span className="text-sm">⚙️</span>
-              </button> */}
-              <button
-                onClick={handleSubmit}
-                disabled={(!value.trim() && files.length === 0) || disabled}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all",
-                  (value.trim() || files.length > 0) && !disabled
-                    ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-                    : "bg-muted text-muted-foreground cursor-not-allowed"
-                )}
-              >
-                <span>Submit</span>
-                <Send className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-        {/* Knowledge Base Toggle */}
-        <div className="mt-2 flex justify-end">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Knowledge Base</span>
-            <button
-              onClick={() => setUseKnowledgeBase(!useKnowledgeBase)}
-              className={cn(
-                "relative h-4 w-8 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20",
-                useKnowledgeBase ? "bg-primary" : "bg-muted"
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white transition-transform",
-                  useKnowledgeBase ? "translate-x-4" : "translate-x-0"
-                )}
-              />
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Default Variant (Compact Bar)
   return (
     <div className="w-full">
+      {/* Quick Actions (shown when enabled) */}
       {showQuickActions && (
         <div className="mb-4 flex flex-wrap justify-center gap-2">
           {quickActions.map((action) => (
@@ -282,15 +175,50 @@ export function ChatInput({
         </div>
       )}
 
-      <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm transition-all duration-200 focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5">
+      {/* Input Container */}
+      <div className={cn(
+        "relative rounded-xl border border-border/60 bg-muted/30 transition-all duration-200",
+        "focus-within:border-primary/40 focus-within:bg-background focus-within:shadow-md focus-within:shadow-primary/5",
+        isWelcome ? "p-3 shadow-sm" : "p-2"
+      )}>
+        {/* Agent Mode Toggle (shown in welcome variant) */}
+        {showAgentMode && (
+          <div className="mb-1.5 absolute right-2 flex justify-end z-10">
+            <button
+              onClick={() => setIsAgentMode(!isAgentMode)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                isAgentMode
+                  ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              <span className="text-sm">🤖</span>
+              <span>AGENT MODE</span>
+              <span className={cn("ml-1 font-bold", isAgentMode ? "opacity-100" : "opacity-50")}>
+                {isAgentMode ? "ON" : "OFF"}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* File Previews (above textarea when files exist) */}
         {files.length > 0 && (
-          <div className="flex flex-wrap gap-2 border-b border-border/40 p-3">
+          <div className={cn(
+            "flex flex-wrap gap-2 border-b border-border/40",
+            isWelcome ? "pb-2 mb-2" : "pb-2 mb-2 px-1"
+          )}>
             {files.map((file) => (
-              <div key={file.id} className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5 text-sm">
+              <div
+                key={file.id}
+                className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[10px]"
+              >
                 <span className="text-muted-foreground">📎</span>
-                <span className="max-w-[150px] truncate text-foreground/80">{file.name}</span>
-                <span className="text-xs text-muted-foreground">({formatFileSize(file.size)})</span>
-                <button onClick={() => removeFile(file.id)} className="ml-1 rounded-full p-0.5 hover:bg-destructive/10 hover:text-destructive">
+                <span className="max-w-[80px] truncate">{file.name}</span>
+                <button
+                  onClick={() => removeFile(file.id)}
+                  className="text-muted-foreground hover:text-destructive"
+                >
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>
@@ -298,50 +226,89 @@ export function ChatInput({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex items-center gap-2 p-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            onChange={handleFileSelect}
-            className="hidden"
-          />
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          rows={textareaRows}
+          className={cn(
+            "w-full resize-none bg-transparent text-foreground placeholder:text-muted-foreground/60 focus:outline-none",
+            isWelcome ? "text-[15px] leading-relaxed" : "text-sm leading-normal"
+          )}
+          onKeyDown={handleKeyDown}
+        />
+
+        {/* Footer Actions */}
+        <div className={cn(
+          "flex items-center justify-between",
+          isWelcome ? "mt-2" : "mt-1"
+        )}>
+          {/* Left: File Upload */}
+          <div className="flex items-center gap-1">
+            {showFileUpload && (
+              <>
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={disabled}
+                  className="group rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="Attach files"
+                >
+                  <Plus className="h-4 w-4 transition-transform group-hover:rotate-90" />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Right: Submit Button */}
           <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
-
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
-            disabled={disabled}
-            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-          />
-
-          <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
-            <MessageSquare className="h-5 w-5" />
-          </button>
-
-          <button
-            type="submit"
-            disabled={disabled || (!value.trim() && files.length === 0)}
+            onClick={handleSubmit}
+            disabled={!canSubmit}
             className={cn(
-              'flex h-9 items-center gap-2 rounded-lg bg-muted px-4 text-sm font-medium transition-all',
-              'hover:bg-primary hover:text-primary-foreground',
-              (disabled || (!value.trim() && files.length === 0)) && 'cursor-not-allowed opacity-50'
+              "flex items-center gap-2 rounded-lg font-medium transition-all",
+              isWelcome ? "px-3 py-1.5 text-[13px]" : "px-3 py-1 text-sm",
+              canSubmit
+                ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
           >
-            <span>Send</span>
-            <Send className="h-4 w-4" />
+            <span>{isWelcome ? 'Submit' : 'Send'}</span>
+            <Send className={cn(isWelcome ? "h-3.5 w-3.5" : "h-4 w-4")} />
           </button>
-        </form>
+        </div>
       </div>
+
+      {/* Knowledge Base Toggle (shown when enabled) */}
+      {showKnowledgeBase && (
+        <div className="mt-2 flex justify-end">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Knowledge Base</span>
+            <button
+              onClick={() => setUseKnowledgeBase(!useKnowledgeBase)}
+              className={cn(
+                "relative h-4 w-8 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20",
+                useKnowledgeBase ? "bg-primary" : "bg-muted"
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white transition-transform",
+                  useKnowledgeBase ? "translate-x-4" : "translate-x-0"
+                )}
+              />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
