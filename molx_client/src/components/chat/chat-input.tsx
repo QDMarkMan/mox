@@ -88,7 +88,6 @@ export function ChatInput({
   showFileUpload = true
 }: ChatInputProps) {
   const [files, setFiles] = useState<ChatInputFile[]>([])
-  const [isAgentMode, setIsAgentMode] = useState(true)
   const [useKnowledgeBase, setUseKnowledgeBase] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -177,27 +176,29 @@ export function ChatInput({
 
       {/* Input Container */}
       <div className={cn(
-        "relative rounded-xl border border-border/60 bg-muted/30 transition-all duration-200",
-        "focus-within:border-primary/40 focus-within:bg-background focus-within:shadow-md focus-within:shadow-primary/5",
+        "input-gradient-border relative rounded-xl border border-border/60 bg-muted/30 transition-all duration-500",
+        "focus-within:border-transparent focus-within:bg-background focus-within:shadow-md focus-within:shadow-primary/5",
         isWelcome ? "p-3 shadow-sm" : "p-2"
       )}>
         {/* Agent Mode Toggle (shown in welcome variant) */}
         {showAgentMode && (
           <div className="mb-1.5 absolute right-2 flex justify-end z-10">
             <button
-              onClick={() => setIsAgentMode(!isAgentMode)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                isAgentMode
-                  ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
-                  : "bg-muted text-muted-foreground"
-              )}
+              // onClick={() => setIsAgentMode(!isAgentMode)}
+              // className={cn(
+              //   "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+              //   isAgentMode
+              //     ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+              //     : "bg-muted text-muted-foreground"
+              // )}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 text-white shadow-sm shadow-purple-500/20"
+
             >
               <span className="text-sm">🤖</span>
               <span>AGENT MODE</span>
-              <span className={cn("ml-1 font-bold", isAgentMode ? "opacity-100" : "opacity-50")}>
+              {/* <span className={cn("ml-1 font-bold", isAgentMode ? "opacity-100" : "opacity-50")}>
                 {isAgentMode ? "ON" : "OFF"}
-              </span>
+              </span> */}
             </button>
           </div>
         )}

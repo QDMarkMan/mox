@@ -179,15 +179,16 @@ export function AppSidebar({
           </SidebarGroup>
         )}
 
-        {/* Empty State */}
+        {/* Empty State - hidden when collapsed */}
         {sessions.length === 0 && (
-          <SidebarGroup>
+          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
             <SidebarGroupContent>
-              <div className="px-2 py-4 text-center">
-                <p className="text-xs text-muted-foreground">
+              <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
+                <div className="mb-2 text-2xl">💬</div>
+                <p className="text-sm font-medium text-muted-foreground">
                   No conversations yet
                 </p>
-                <p className="mt-1 text-[10px] text-muted-foreground/60">
+                <p className="mt-1 text-xs text-muted-foreground/60">
                   Click "New Task" to start
                 </p>
               </div>

@@ -65,8 +65,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
   return (
     <div
       className={cn(
-        "group flex gap-3 rounded-lg p-3 transition-all",
-        isUser ? "bg-muted/40" : ""
+        "group flex gap-3 rounded-lg p-3 transition-all duration-200 ease-out",
+        "hover:bg-muted/30 hover:shadow-sm",
+        isUser ? "bg-muted/40 hover:bg-muted/50" : ""
       )}
     >
       {/* Avatar */}

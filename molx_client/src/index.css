@@ -193,3 +193,49 @@
     transform: translateY(10px) translateX(5px);
   }
 }
+
+/* Gradient Border Animation for Input Focus */
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.input-gradient-border {
+  position: relative;
+}
+
+.input-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 0.875rem;
+  padding: 1px;
+  background: linear-gradient(90deg,
+      #8b5cf6,
+      #ec4899,
+      #3b82f6,
+      #10b981,
+      #8b5cf6);
+  background-size: 300% 100%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 1s ease;
+  pointer-events: none;
+}
+
+.input-gradient-border:focus-within::before {
+  opacity: 1;
+  /* animation: gradient-flow 3s linear infinite; */
+}
