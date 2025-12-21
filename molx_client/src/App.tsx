@@ -1,30 +1,58 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { ChatList } from '@/components/chat/chat-list'
 import { ChatPanel } from '@/components/chat/chat-panel'
-import { Header } from '@/components/layout/header'
 
-function App() {
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+export interface ChatSession {
+  id: string
+  title: string
+  createdAt: Date
+}
+
+export default function App() {
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+
+  // Create a new session and return the new session ID
+  const createSession = useCallback((initialMessage?: string) => {
+    const newId = `session-${Date.now()}`
+    const title = initialMessage?.slice(0, 30) || 'New Task'
+    const newSession: ChatSession = {
+      id: newId,
+      title: title + (initialMessage && initialMessage.length > 30 ? '...' : ''),
+      createdAt: new Date()
+    }
+    setSessions(prev => [newSession, ...prev])
+    setSessionId(newId)
+    return newId
+  }, [])
+
+  // Delete a session
+  const deleteSession = useCallback((id: string) => {
+    setSessions(prev => prev.filter(s => s.id !== id))
+    if (sessionId === id) {
+      setSessionId(null)
+    }
+  }, [sessionId])
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <Header />
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Chat List */}
-        <aside className="w-64 border-r border-border bg-card">
-          <ChatList
-            activeSessionId={activeSessionId}
-            onSessionSelect={setActiveSessionId}
-          />
-        </aside>
-
-        {/* Main - Chat Panel */}
-        <main className="flex-1 overflow-hidden">
-          <ChatPanel sessionId={activeSessionId} />
-        </main>
+    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+      {/* Sidebar */}
+      <div className="w-[280px] shrink-0 border-r border-border bg-muted/30">
+        <ChatList
+          activeId={sessionId}
+          onSelect={setSessionId}
+          sessions={sessions}
+          onDeleteSession={deleteSession}
+        />
       </div>
+
+      {/* Main Content */}
+      <main className="flex flex-1 flex-col overflow-hidden bg-background">
+        <ChatPanel
+          sessionId={sessionId}
+          onCreateSession={createSession}
+        />
+      </main>
     </div>
   )
 }
-
-export default App

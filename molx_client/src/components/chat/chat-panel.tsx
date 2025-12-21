@@ -1,195 +1,160 @@
-import { useRef, useEffect } from 'react'
-import { Send, Bot, User, Lightbulb } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { ChatInput, type ChatInputFile } from './chat-input'
+import { WelcomePage } from './welcome-page'
+import { Bot, User } from 'lucide-react'
 import { cn } from '@/utils'
-import { useStreamingChat } from '@/hooks'
+import { useStreamingChat } from '@/hooks/use-streaming-chat'
+import ReactMarkdown from 'react-markdown'
 
 interface ChatPanelProps {
   sessionId: string | null
+  onCreateSession?: (initialMessage?: string) => string
 }
 
-export function ChatPanel({ sessionId }: ChatPanelProps) {
+export function ChatPanel({ sessionId, onCreateSession }: ChatPanelProps) {
+  const [input, setInput] = useState('')
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
   const {
     messages,
-    input,
-    setInput,
     isLoading,
-    thinking,
-    sendMessage,
+    sendMessage
   } = useStreamingChat({
-    api: '/api/v1/agent/stream',
     sessionId,
+    onFinish: () => {
+      // Optional: Handle completion
+    }
   })
 
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
+  // Auto-scroll to bottom
   useEffect(() => {
-    scrollToBottom()
-  }, [messages, thinking])
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
+  // Send pending message when session is created
+  useEffect(() => {
+    if (sessionId && pendingMessage) {
+      sendMessage(pendingMessage)
+      setPendingMessage(null)
+    }
+  }, [sessionId, pendingMessage, sendMessage])
 
-    const message = input
+  const handleSubmit = useCallback(async (value: string, files?: ChatInputFile[]) => {
+    if (!value.trim() && (!files || files.length === 0)) return
+
+    // Note: File uploads are not yet supported by the streaming hook
+    if (files && files.length > 0) {
+      console.warn('File uploads are not yet supported in streaming mode')
+    }
+
+    // If no session exists, create one first
+    if (!sessionId && onCreateSession) {
+      // Store the message to send after session is created
+      setPendingMessage(value)
+      onCreateSession(value) // Pass message for title generation
+      setInput('')
+      return
+    }
+
+    await sendMessage(value)
     setInput('')
-    await sendMessage(message)
+  }, [sessionId, onCreateSession, sendMessage])
+
+  const handleQuickAction = (actionId: string) => {
+    console.log('Quick action:', actionId)
+    // Handle quick actions
   }
 
+  // If no session is active, show the new Welcome Page
   if (!sessionId) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <Bot className="mx-auto h-16 w-16 text-muted-foreground/50" />
-          <h2 className="mt-4 text-lg font-medium text-muted-foreground">
-            Welcome to MolX Agent
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground/70">
-            Select a conversation or create a new one to start
-          </p>
-        </div>
+      <div className="flex h-full flex-col bg-background">
+        <WelcomePage onInputSubmit={handleSubmit} />
       </div>
     )
   }
 
+
   return (
-    <div className="flex h-full flex-col">
-      {/* Messages */}
-      <div className="flex-1 overflow-auto p-4">
+    <div className="flex h-full flex-col bg-background">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4" ref={scrollRef}>
         <div className="mx-auto max-w-3xl space-y-4">
-          {messages.length === 0 ? (
-            <div className="flex h-full items-center justify-center py-20">
-              <div className="text-center">
-                <Bot className="mx-auto h-12 w-12 text-primary/50" />
-                <p className="mt-4 text-muted-foreground">
-                  Ask me about SAR analysis, drug design, or molecular properties
-                </p>
-              </div>
-            </div>
-          ) : (
-            messages.map((message) => (
-              <div key={message.id} className="space-y-2">
-                {/* Thinking Block (for assistant messages) */}
-                {message.role === 'assistant' && message.thinking && message.thinking.status === 'complete' && (
-                  <div className="ml-11 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
-                    <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
-                      <Lightbulb className="h-4 w-4" />
-                      <span className="font-medium">Thinking</span>
-                      {message.thinking.intent && (
-                        <span className="rounded bg-amber-200 px-1.5 py-0.5 text-xs dark:bg-amber-800">
-                          {message.thinking.intent}
-                        </span>
-                      )}
-                      {message.thinking.confidence !== undefined && (
-                        <span className="text-xs text-amber-600 dark:text-amber-500">
-                          ({(message.thinking.confidence * 100).toFixed(0)}%)
-                        </span>
-                      )}
-                    </div>
-                    {message.thinking.reasoning && (
-                      <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
-                        {message.thinking.reasoning}
-                      </p>
-                    )}
-                  </div>
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "flex gap-3 rounded-xl p-3 transition-all",
+                message.role === 'user'
+                  ? "bg-muted/30"
+                  : "bg-background"
+              )}
+            >
+              <div className={cn(
+                "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border shadow-sm",
+                message.role === 'user'
+                  ? "bg-background border-border"
+                  : "bg-primary/10 border-primary/20 text-primary"
+              )}>
+                {message.role === 'user' ? (
+                  <User className="h-4 w-4" />
+                ) : (
+                  <Bot className="h-4 w-4" />
                 )}
+              </div>
 
-                {/* Message Content */}
-                <div
-                  className={cn(
-                    'flex gap-3',
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  )}
-                >
-                  {message.role === 'assistant' && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary">
-                      <Bot className="h-5 w-5 text-primary-foreground" />
-                    </div>
-                  )}
-                  <div
-                    className={cn(
-                      'max-w-[80%] rounded-lg px-4 py-2',
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    )}
-                  >
-                    {message.role === 'assistant' ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <ReactMarkdown>{message.content}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <p className="text-sm">{message.content}</p>
-                    )}
-                  </div>
-                  {message.role === 'user' && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-                      <User className="h-5 w-5 text-secondary-foreground" />
-                    </div>
+              <div className="flex-1 space-y-1 overflow-hidden">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-medium">
+                    {message.role === 'user' ? 'You' : 'MolX Agent'}
+                  </span>
+                </div>
+
+                <div className="prose prose-sm dark:prose-invert max-w-none break-words text-[14px] leading-relaxed">
+                  {message.role === 'assistant' ? (
+                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{message.content}</p>
                   )}
                 </div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
 
-          {/* Live Thinking Indicator */}
-          {thinking && thinking.status === 'analyzing' && (
-            <div className="ml-11 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
-              <Lightbulb className="h-4 w-4 animate-pulse text-amber-600 dark:text-amber-400" />
-              <span className="text-sm text-amber-700 dark:text-amber-400">
-                {thinking.message || 'Analyzing...'}
-              </span>
+          {isLoading && (
+            <div className="flex gap-4 rounded-xl p-4">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary shadow-sm">
+                <Bot className="h-5 w-5 animate-pulse" />
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/40" style={{ animationDelay: '0ms' }} />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/40" style={{ animationDelay: '150ms' }} />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-primary/40" style={{ animationDelay: '300ms' }} />
+              </div>
             </div>
           )}
-
-          {/* Loading Indicator */}
-          {isLoading && !thinking && messages[messages.length - 1]?.role === 'assistant' &&
-            !messages[messages.length - 1]?.content && (
-              <div className="flex gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary">
-                  <Bot className="h-5 w-5 text-primary-foreground" />
-                </div>
-                <div className="rounded-lg bg-muted px-4 py-2">
-                  <div className="flex gap-1">
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: '0ms' }} />
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: '150ms' }} />
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: '300ms' }} />
-                  </div>
-                </div>
-              </div>
-            )}
-          <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {/* Input Form */}
-      <div className="border-t border-border p-4">
-        <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about SAR analysis, drug design..."
-              className="flex-1 rounded-lg border border-input bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              disabled={isLoading}
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className="rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-            </button>
+      {/* Input Area (Only shown in active chat) */}
+      <div className="border-t border-border bg-background/80 p-4 backdrop-blur-sm">
+        <div className="mx-auto max-w-3xl">
+          <ChatInput
+            value={input}
+            onChange={setInput}
+            onSubmit={handleSubmit}
+            onQuickAction={handleQuickAction}
+            disabled={isLoading}
+            showQuickActions={false} // Hide quick actions in chat view to keep it clean
+            variant="default"
+          />
+          <div className="mt-2 text-center text-xs text-muted-foreground">
+            MolX Agent can make mistakes. Please verify important information.
           </div>
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            {thinking ? '🧠 Thinking...' : isLoading ? '🔄 Streaming...' : '✨ Streaming enabled'}
-          </p>
-        </form>
+        </div>
       </div>
     </div>
   )
