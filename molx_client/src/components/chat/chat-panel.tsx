@@ -46,7 +46,7 @@ export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: 
 
     // Delayed scroll to handle layout shifts/images
     const timeoutId = setTimeout(scrollToBottom, 100)
-    
+
     return () => clearTimeout(timeoutId)
   }, [messages, lastMessageContent, isLoading])
 
@@ -127,7 +127,7 @@ export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: 
             rows={2}
           />
           <div className="mt-2 text-center text-xs text-muted-foreground">
-            MolX Agent can make mistakes. Please verify important information.
+            Molx Agent can make mistakes. Please verify important information.
           </div>
         </div>
       </div>

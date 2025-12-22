@@ -15,7 +15,7 @@ from molx_server.config import get_server_settings
 
 cli = typer.Typer(
     name="molx-server",
-    help="MolX Agent API Server",
+    help="Molx Agent API Server",
     add_completion=False,
 )
 
@@ -45,7 +45,7 @@ def run(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     debug: bool = typer.Option(False, "--debug", "-d", help="Debug mode"),
 ) -> None:
-    """Start the MolX Agent API server."""
+    """Start the Molx Agent API server."""
     settings = get_server_settings()
 
     # Setup logging

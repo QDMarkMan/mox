@@ -1,5 +1,5 @@
 """
-MolX Core - Shared utilities and storage for MolX Agent ecosystem.
+MolX Core - Shared utilities and storage for Molx Agent ecosystem.
 
 This module provides shared functionality used by both molx_agent and molx_server.
 """

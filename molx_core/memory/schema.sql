@@ -18,7 +18,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_created
     ON conversations(created_at DESC);
 
 -- Comments for documentation
-COMMENT ON TABLE conversations IS 'Stores conversation sessions for MolX Agent';
+COMMENT ON TABLE conversations IS 'Stores conversation sessions for Molx Agent';
 COMMENT ON COLUMN conversations.session_id IS 'Unique session identifier (UUID)';
 COMMENT ON COLUMN conversations.messages IS 'Array of conversation messages in JSONB format';
 COMMENT ON COLUMN conversations.metadata IS 'Additional session metadata in JSONB format';

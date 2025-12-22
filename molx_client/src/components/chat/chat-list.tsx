@@ -57,7 +57,7 @@ export function ChatList({ activeId, onSelect, sessions, onDeleteSession }: Chat
             <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
           </svg>
         </div>
-        <span className="text-base font-semibold tracking-tight">MolX Agent</span>
+        <span className="text-base font-semibold tracking-tight">Molx Agent</span>
       </div>
 
       {/* Main Navigation */}

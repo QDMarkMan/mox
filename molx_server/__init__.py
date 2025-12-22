@@ -1,5 +1,5 @@
 """
-MolX Server - Application Service Layer for MolX Agent.
+MolX Server - Application Service Layer for Molx Agent.
 
 This module provides HTTP API endpoints using FastAPI + LangServe
 for high-performance async processing with native LangChain streaming support.

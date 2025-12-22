@@ -1,8 +1,8 @@
 # MolX Client
 
-> Web UI Client for MolX Agent
+> Web UI Client for Molx Agent
 
-MolX Agent 的 Web 客户端，提供现代化的聊天界面与 AI Agent 交互。
+Molx Agent 的 Web 客户端，提供现代化的聊天界面与 AI Agent 交互。
 
 ## 技术栈
 
@@ -27,7 +27,7 @@ MolX Agent 的 Web 客户端，提供现代化的聊天界面与 AI Agent 交互
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  MolX Agent                              [Settings]     │
+│  Molx Agent                              [Settings]     │
 ├─────────────────┬───────────────────────────────────────┤
 │  Chat List      │  Chat with Agent                      │
 │  ┌───────────┐  │  ┌─────────────────────────────────┐  │

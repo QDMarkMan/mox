@@ -35,7 +35,7 @@ class ServerSettings(BaseSettings):
     # API settings
     api_version: str = "v1"
     api_prefix: str = f"/api/{api_version}"
-    api_title: str = "MolX Agent Server API"
+    api_title: str = "Molx Agent Server API"
     api_description: str = "Drug design agent API named MolX"
 
     # CORS settings

@@ -1,9 +1,9 @@
 /**
- * MolX Agent Capabilities data and display component.
+ * Molx Agent Capabilities data and display component.
  * Shows the three core capabilities: Data Organization, SAR Analysis, and Molecular Analysis.
  */
 
-// MolX Agent Capabilities
+// Molx Agent Capabilities
 const capabilities = [
   {
     id: 'data-organization',
@@ -62,7 +62,7 @@ function CapabilityCard({ emoji, title, description, features }: CapabilityCardP
 }
 
 /**
- * Capabilities section component displaying all MolX Agent capabilities.
+ * Capabilities section component displaying all Molx Agent capabilities.
  */
 export function CapabilitiesSection() {
   return (

@@ -298,10 +298,16 @@ class SessionManager:
 
         # Also clean cache using wall-clock timestamps
         ttl_delta = timedelta(seconds=ttl_seconds)
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
         expired: list[str] = []
         for sid, session in list(self._sessions_cache.items()):
             last_activity = session.session_data.last_activity
+            
+            # Ensure last_activity is aware for comparison
+            if last_activity.tzinfo is None:
+                last_activity = last_activity.replace(tzinfo=timezone.utc)
+                
             if now - last_activity > ttl_delta:
                 expired.append(sid)
 

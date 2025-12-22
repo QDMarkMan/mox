@@ -26,7 +26,7 @@ export function WelcomePage({ onInputSubmit }: WelcomePageProps) {
           </div>
           <div className="space-y-1.5">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Welcome to MolX Agent
+              Welcome to Molx Agent
             </h1>
             <p className="text-[15px] text-muted-foreground">
               Your intelligent molecular data analysis assistant for drug discovery

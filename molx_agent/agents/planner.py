@@ -424,9 +424,24 @@ Create an improved plan that addresses these issues.
 
     def _extract_tasks(self, payload: dict[str, Any]) -> dict[str, Task]:
         tasks: dict[str, Task] = {}
-        for raw in payload.get("tasks", []):
+        raw_tasks = payload.get("tasks", [])
+        if not isinstance(raw_tasks, list):
+            logger.warning("Planner LLM returned non-list tasks: %s", raw_tasks)
+            return {}
+
+        for i, raw in enumerate(raw_tasks):
+            if not isinstance(raw, dict):
+                continue
+            
+            # Ensure task has an ID
+            tid = raw.get("id")
+            if not tid:
+                tid = f"task_{i}_{raw.get('type', 'unknown')}"
+                raw["id"] = tid
+                logger.warning("Generated missing task ID: %s", tid)
+                
             raw["status"] = "pending"
-            tasks[raw["id"]] = raw
+            tasks[tid] = raw
         return tasks
 
     def _derive_reflection_from_state(self, state: AgentState) -> Optional[ReflectionResult]:

@@ -189,10 +189,10 @@ class SarGraphNodes:
         return "plan" if self.classifier.is_supported(intent) else "unsupported"
 
     def route_after_plan(self, state: AgentState) -> str:
-        return "act" if self._has_pending_tasks(state) else "reflect"
+        return "act" if self._pick_next_task(state) else "reflect"
 
     def route_after_act(self, state: AgentState) -> str:
-        return "act" if self._has_pending_tasks(state) else "reflect"
+        return "act" if self._pick_next_task(state) else "reflect"
 
     def route_after_reflect(self, state: AgentState) -> str:
         reflection = state.get("reflection", {})
@@ -203,7 +203,7 @@ class SarGraphNodes:
         return "finalize"
 
     def route_after_optimize(self, state: AgentState) -> str:
-        return "act" if self._has_pending_tasks(state) else "finalize"
+        return "act" if self._pick_next_task(state) else "finalize"
 
     @staticmethod
     def _ensure_results(state: AgentState) -> None:

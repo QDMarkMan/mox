@@ -32,7 +32,7 @@ def get_llm() -> ChatOpenAI:
 
 
 def parse_json_response(content: str) -> dict[str, Any]:
-    """Parse JSON from LLM response, handling markdown code blocks.
+    """Parse JSON from LLM response, handling markdown code blocks and extra text.
 
     Args:
         content: The raw LLM response content.
@@ -40,17 +40,25 @@ def parse_json_response(content: str) -> dict[str, Any]:
     Returns:
         Parsed JSON as a dictionary.
     """
+    import re
     content = content.strip()
-    # Remove markdown code blocks if present
-    if content.startswith("```"):
-        lines = content.split("\n")
-        # Remove first line (```json or ```)
-        lines = lines[1:]
-        # Remove last line (```)
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        content = "\n".join(lines)
-    return json.loads(content)
+    
+    # Try to find JSON block in markdown
+    json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", content)
+    if json_match:
+        content = json_match.group(1).strip()
+    else:
+        # If no markdown block, try to find the first '{' and last '}'
+        start = content.find("{")
+        end = content.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            content = content[start : end + 1]
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON from LLM: {e}\nContent: {content}")
+        raise
 
 
 def invoke_llm(

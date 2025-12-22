@@ -38,7 +38,7 @@ class MolxAgent(BaseAgent):
     ) -> None:
         super().__init__(
             name="molx",
-            description="Main orchestrator for SAR analysis using LangGraph",
+            description="Main orchestrator for Drug Design using LangGraph",
         )
         self.intent_classifier = intent_classifier or IntentClassifierAgent()
         self.planner = planner or PlannerAgent()

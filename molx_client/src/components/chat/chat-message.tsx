@@ -80,7 +80,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           "text-xs font-medium",
           isUser ? "text-muted-foreground" : "text-primary"
         )}>
-          {isUser ? 'You' : 'MolX Agent'}
+          {isUser ? 'You' : 'Molx Agent'}
         </span>
 
         <MessageContent content={message.content} isUser={isUser} />

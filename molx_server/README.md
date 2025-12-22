@@ -1,8 +1,8 @@
 # molx_server
 
-> MolX Server - Application Service Layer for MolX Agent
+> MolX Server - Application Service Layer for Molx Agent
 
-应用服务层 (Application Layer) - 为 MolX Agent 提供 HTTP API 网关，使用 FastAPI + LangServe 实现高性能异步处理和流式输出支持。
+应用服务层 (Application Layer) - 为 Molx Agent 提供 HTTP API 网关，使用 FastAPI + LangServe 实现高性能异步处理和流式输出支持。
 
 ## 特性
 
