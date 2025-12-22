@@ -11,11 +11,14 @@
 import json
 import logging
 from dataclasses import dataclass
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, TYPE_CHECKING
 
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.llm import invoke_llm
 from molx_agent.agents.modules.state import AgentState, Task
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from molx_agent.memory import SessionMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -170,11 +173,14 @@ class PlannerAgent(BaseAgent):
         user_query = state.get("user_query", "")
         console.print("\n[bold cyan]🧠 THINK: Analyzing query and creating plan...[/]")
 
+        uploads = self._gather_uploaded_files(state)
+
         try:
             plan = self._invoke_planner_llm(
                 user_query,
-                uploads=state.get("uploaded_files"),
+                uploads=uploads,
             )
+            self._seed_data_cleaner_inputs(plan.tasks, uploads)
             state["plan_reasoning"] = plan.reasoning
             self._log_plan(console, plan)
 
@@ -328,6 +334,48 @@ class PlannerAgent(BaseAgent):
         tasks = self._extract_tasks(payload)
         reasoning = payload.get("reasoning", "")
         return PlanResult(reasoning=reasoning, tasks=tasks)
+
+    def _seed_data_cleaner_inputs(
+        self, tasks: dict[str, Task], uploads: list[dict[str, Any]]
+    ) -> None:
+        if not uploads:
+            return
+
+        file_entry = next(
+            (item for item in uploads if isinstance(item, dict) and item.get("file_path")),
+            None,
+        )
+        if not file_entry:
+            return
+
+        file_path = file_entry.get("file_path")
+        if not isinstance(file_path, str) or not file_path:
+            return
+
+        for task in tasks.values():
+            if task.get("type") != "data_cleaner":
+                continue
+            inputs = task.setdefault("inputs", {})
+            if inputs.get("file_path"):
+                continue
+            inputs["file_path"] = file_path
+            if file_entry.get("file_name") and not inputs.get("file_name"):
+                inputs["file_name"] = file_entry["file_name"]
+            break
+
+    def _gather_uploaded_files(self, state: AgentState) -> list[dict[str, Any]]:
+        uploads: list[dict[str, Any]] = []
+        direct = state.get("uploaded_files")
+        if isinstance(direct, list):
+            uploads.extend([item for item in direct if isinstance(item, dict)])
+
+        metadata = state.get("_memory_metadata")
+        from molx_agent.memory import SessionMetadata  # local import to avoid cycle
+
+        if isinstance(metadata, SessionMetadata):
+            uploads.extend(record.to_dict() for record in metadata.uploaded_files)
+
+        return uploads
 
     def _invoke_reflection_llm(self, state: AgentState) -> ReflectionResult:
         tasks = state.get("tasks", {})

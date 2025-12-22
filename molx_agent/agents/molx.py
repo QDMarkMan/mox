@@ -91,12 +91,18 @@ class ChatSession:
     def __init__(self, recorder: Optional[SessionRecorder] = None):
         self.agent = MolxAgent()
         self.state = AgentState(messages=[], tasks={}, results={}, uploaded_files=[])
+        self.state["_memory_metadata"] = None
         self._recorder = recorder
         self._last_state: Optional[AgentState] = None
+        self._metadata: Optional[SessionMetadata] = None
 
     def attach_recorder(self, recorder: SessionRecorder) -> None:
         """Attach a session recorder for persistence."""
         self._recorder = recorder
+        metadata = recorder.metadata
+        if isinstance(metadata, SessionMetadata):
+            self._metadata = metadata
+            self.state["_memory_metadata"] = metadata
 
     def send(self, user_input: str) -> str:
         """Send user input to the agent and get a response."""
@@ -122,6 +128,7 @@ class ChatSession:
     def clear(self) -> None:
         """Clear conversation history."""
         self.state = AgentState(messages=[], tasks={}, results={}, uploaded_files=[])
+        self.state["_memory_metadata"] = self._metadata
 
     def get_history(self) -> list[dict[str, str]]:
         """Get conversation history."""
@@ -141,6 +148,8 @@ class ChatSession:
 
     def load_uploaded_files(self, metadata: SessionMetadata) -> None:
         """Hydrate the current state with uploaded file metadata."""
+        self._metadata = metadata
+        self.state["_memory_metadata"] = metadata
         self.state["uploaded_files"] = [record.to_dict() for record in metadata.uploaded_files]
 
     def register_uploaded_file(self, record: FileRecord) -> None:

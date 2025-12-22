@@ -56,6 +56,7 @@ class AgentState(TypedDict, total=False):
     intent_confidence: Optional[float]
     reflection: dict[str, Any]
     uploaded_files: list[dict[str, Any]]
+    _memory_metadata: Any
 
     # Error handling
     error: Optional[str]
