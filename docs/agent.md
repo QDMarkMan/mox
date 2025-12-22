@@ -10,6 +10,16 @@
 3. LangGraph 代码示例（含 state、边、入口函数）
 4. 如何逐步把真实工具接进去
 
+## Artifact & upload 目录
+
+`molx_agent/config.py` 暴露了 `artifacts_root` 以及对应的子目录参数，供 agent 工具和
+服务器端 API 写入文件：
+
+- `reports_subdir` / `visualizations_subdir` / `standardize_subdir`：内部工具输出。
+- `uploads_subdir`：新的用户上传目录，默认为 `artifacts/uploads/<session_id>`。服务器的
+  `/session/{id}/files` 接口会将文件保存到这里，并把元数据写入 Session memory，LangGraph
+  的 state 也会携带 `uploaded_files` 供 DataCleaner 直接消费。
+
 ---
 
 ## 1. LangGraph 拓扑设计

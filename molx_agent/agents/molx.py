@@ -19,7 +19,7 @@ from molx_agent.agents.modules.state import AgentState
 from molx_agent.agents.planner import PlannerAgent
 from molx_agent.agents.reporter import ReporterAgent
 from molx_agent.agents.sar import SARAgent
-from molx_core.memory import SessionRecorder
+from molx_agent.memory import FileRecord, SessionMetadata, SessionRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +63,12 @@ class MolxAgent(BaseAgent):
         state.setdefault("messages", [])
         state.setdefault("results", {})
         state.setdefault("tasks", {})
+        state.setdefault("uploaded_files", [])
         return self._graph.invoke(state)
 
     def invoke(self, user_query: str, *, state: Optional[AgentState] = None) -> AgentState:
         """Convenience helper to run a query with optional persistent state."""
-        state = state or AgentState(messages=[], tasks={}, results={})
+        state = state or AgentState(messages=[], tasks={}, results={}, uploaded_files=[])
         state["user_query"] = user_query
         return self.run(state)
 
@@ -89,7 +90,7 @@ class ChatSession:
 
     def __init__(self, recorder: Optional[SessionRecorder] = None):
         self.agent = MolxAgent()
-        self.state = AgentState(messages=[], tasks={}, results={})
+        self.state = AgentState(messages=[], tasks={}, results={}, uploaded_files=[])
         self._recorder = recorder
         self._last_state: Optional[AgentState] = None
 
@@ -120,7 +121,7 @@ class ChatSession:
 
     def clear(self) -> None:
         """Clear conversation history."""
-        self.state = AgentState(messages=[], tasks={}, results={})
+        self.state = AgentState(messages=[], tasks={}, results={}, uploaded_files=[])
 
     def get_history(self) -> list[dict[str, str]]:
         """Get conversation history."""
@@ -137,3 +138,12 @@ class ChatSession:
             content = msg.content if hasattr(msg, "content") else str(msg)
             history.append({"role": role, "content": content})
         return history
+
+    def load_uploaded_files(self, metadata: SessionMetadata) -> None:
+        """Hydrate the current state with uploaded file metadata."""
+        self.state["uploaded_files"] = [record.to_dict() for record in metadata.uploaded_files]
+
+    def register_uploaded_file(self, record: FileRecord) -> None:
+        """Record a new uploaded file inside the conversation state."""
+        uploads = self.state.setdefault("uploaded_files", [])
+        uploads.append(record.to_dict())

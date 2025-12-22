@@ -200,6 +200,47 @@ class TestParseInlineCSVData:
         assert "compounds" in result or "error" in result
 
 
+class TestDataCleanerRun:
+    """Integration-style checks for DataCleanerAgent.run."""
+
+    def test_run_prefers_uploaded_file(self, agent, tmp_path):
+        """When no inline data is present, uploaded file paths should be used."""
+        dataset = tmp_path / "cpds.csv"
+        dataset.write_text("smiles,activity\nCCO,1")
+
+        extractor = MagicMock()
+        extractor.name = "csv"
+        extractor.invoke.return_value = {"compounds": [{"smiles": "CCO"}]}
+        agent.extractor_tools = [extractor, extractor, extractor]
+
+        cleaner = MagicMock()
+        cleaner.invoke.return_value = {
+            "compounds": [{"smiles": "CCO"}],
+            "cleaned_count": 1,
+            "original_count": 1,
+            "removed": [],
+        }
+        saver = MagicMock()
+        saver.invoke.return_value = {"csv": "clean.csv"}
+        agent.standardize_tools = [cleaner, saver]
+        agent.tools = agent.extractor_tools + agent.standardize_tools
+
+        state = {
+            "current_task_id": "clean",
+            "tasks": {"clean": {"id": "clean", "type": "data_cleaner", "description": ""}},
+            "uploaded_files": [
+                {"file_path": str(dataset), "file_name": "cpds.csv"},
+            ],
+            "results": {},
+            "user_query": "",
+        }
+
+        updated_state = agent.run(state)
+
+        extractor.invoke.assert_called_once_with(str(dataset))
+        assert updated_state["results"]["clean"]["output_files"]["csv"] == "clean.csv"
+
+
 # =============================================================================
 # Tests for _detect_columns_with_llm
 # =============================================================================

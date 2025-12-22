@@ -323,6 +323,17 @@ Return JSON:
             return self.extractor_tools[2]  # SDF
         return None
 
+    def _get_uploaded_file_path(self, state: AgentState) -> Optional[str]:
+        """Return the first existing uploaded file path from agent state."""
+        uploads = state.get("uploaded_files") or []
+        for upload in uploads:
+            if not isinstance(upload, dict):
+                continue
+            candidate = upload.get("file_path")
+            if candidate and os.path.exists(candidate):
+                return candidate
+        return None
+
     def run(self, state: AgentState) -> AgentState:
         """Execute data extraction and standardization.
         
@@ -355,8 +366,13 @@ Return JSON:
         content = inputs.get("data") or inputs.get("file_path") or ""
         if not content:
             content = self._extract_file_path(description) or self._extract_file_path(user_query) or ""
-        
+
         file_path = self._extract_file_path(content) if content else None
+        if not file_path:
+            uploaded_path = self._get_uploaded_file_path(state)
+            if uploaded_path:
+                file_path = uploaded_path
+                console.print(f"   [dim]Using uploaded file: {uploaded_path}[/]")
         
         # Check if we have a valid file path
         extracted_data = None

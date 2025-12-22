@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     standardize_subdir: str = "standardized"
     reports_subdir: str = "reports"
     visualizations_subdir: str = "visualizations"
+    uploads_subdir: str = "uploads"
 
     # MCP (Model Context Protocol) Configuration
     MCP_ENABLED: bool = True

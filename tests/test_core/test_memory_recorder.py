@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from molx_core.memory import SessionData
 from molx_core.memory.recorder import (
+    FileRecord,
     ReportRecord,
     SessionMetadata,
     SessionRecorder,
@@ -88,3 +89,56 @@ def test_session_metadata_round_trip() -> None:
     assert len(restored.turns) == 1
     assert restored.turns[0].query == "Hello"
     assert restored.reports[0].report_path == "reports/sar.html"
+
+
+def test_metadata_tracks_uploaded_files(tmp_path) -> None:
+    """Adding uploaded files should be reflected in metadata serialization."""
+    metadata = SessionMetadata()
+    upload_path = tmp_path / "dataset.csv"
+    upload_path.write_text("smiles,activity\nCCO,1")
+
+    record = FileRecord(
+        file_id="file-1",
+        file_name="dataset.csv",
+        file_path=str(upload_path),
+        content_type="text/csv",
+        size_bytes=upload_path.stat().st_size,
+    )
+    metadata.add_uploaded_file(record)
+
+    dumped = metadata.to_dict()
+    assert dumped["uploaded_files"][0]["file_name"] == "dataset.csv"
+
+    restored = SessionMetadata.from_dict(dumped)
+    assert restored.uploaded_files[0].file_path == str(upload_path)
+
+
+def test_recorder_captures_artifacts_from_results(tmp_path) -> None:
+    """Record turn should emit artifact metadata when reports/output files exist."""
+    session = SessionData(session_id="sess-artifacts")
+    recorder = SessionRecorder(session)
+
+    report_path = tmp_path / "sar.html"
+    report_path.write_text("<html></html>")
+
+    csv_path = tmp_path / "clean.csv"
+    csv_path.write_text("smiles,activity\nCCO,1")
+
+    state = {
+        "tasks": {
+            "clean": {"id": "clean", "type": "data_cleaner", "description": ""}
+        },
+        "results": {
+            "clean": {
+                "report_path": str(report_path),
+                "output_files": {"csv": str(csv_path)},
+            }
+        },
+    }
+
+    recorder.record_turn(query="Run", response="done", state=state)
+    metadata = session.metadata
+    assert metadata.artifacts
+    paths = {artifact.file_path for artifact in metadata.artifacts}
+    assert str(report_path) in paths
+    assert str(csv_path) in paths

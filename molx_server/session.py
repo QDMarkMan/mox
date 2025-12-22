@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from molx_agent.agents.molx import ChatSession
-from molx_agent.memory import bind_chat_session
+from molx_agent.memory import SessionMetadata, bind_chat_session
 from molx_core.config import get_core_settings
 from molx_core.memory import (
     ConversationStore,
@@ -34,11 +34,14 @@ class ManagedSession:
 
     def __init__(self, session_data: SessionData) -> None:
         self.session_data = session_data
+        if not isinstance(self.session_data.metadata, SessionMetadata):
+            self.session_data.metadata = SessionMetadata.from_dict(self.session_data.metadata)
         self.chat_session = ChatSession()
         
         # Restore messages from storage
         self._restore_messages()
         bind_chat_session(self.chat_session, self.session_data)
+        self.chat_session.load_uploaded_files(self.session_data.metadata)
 
     def _restore_messages(self) -> None:
         """Restore messages from stored session data."""

@@ -171,7 +171,10 @@ class PlannerAgent(BaseAgent):
         console.print("\n[bold cyan]🧠 THINK: Analyzing query and creating plan...[/]")
 
         try:
-            plan = self._invoke_planner_llm(user_query)
+            plan = self._invoke_planner_llm(
+                user_query,
+                uploads=state.get("uploaded_files"),
+            )
             state["plan_reasoning"] = plan.reasoning
             self._log_plan(console, plan)
 
@@ -300,8 +303,27 @@ class PlannerAgent(BaseAgent):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _invoke_planner_llm(self, user_query: str) -> PlanResult:
-        user_message = f"User query:\n{user_query}\n\nCreate a task plan."
+    def _invoke_planner_llm(
+        self,
+        user_query: str,
+        uploads: Optional[list[dict[str, Any]]] = None,
+    ) -> PlanResult:
+        file_block = ""
+        if uploads:
+            details: list[str] = []
+            for upload in uploads[:5]:
+                if not isinstance(upload, dict):
+                    continue
+                name = upload.get("file_name") or upload.get("file_path")
+                path = upload.get("file_path")
+                if name and path:
+                    details.append(f"- {name} ({path})")
+                elif name:
+                    details.append(f"- {name}")
+            if details:
+                file_block = "\n\nAvailable session files:\n" + "\n".join(details)
+
+        user_message = f"User query:\n{user_query}{file_block}\n\nCreate a task plan."
         payload = invoke_llm(PLANNER_SYSTEM_PROMPT, user_message, parse_json=True)
         tasks = self._extract_tasks(payload)
         reasoning = payload.get("reasoning", "")

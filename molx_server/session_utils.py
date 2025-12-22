@@ -14,4 +14,6 @@ def metadata_to_response(
         structured_data=metadata.structured_data,
         reports=[report.to_dict() for report in metadata.reports],
         turns=[turn.to_dict() for turn in metadata.turns],
+        uploaded_files=[record.to_dict() for record in metadata.uploaded_files],
+        artifacts=[record.to_dict() for record in metadata.artifacts],
     )

@@ -8,6 +8,8 @@ ConversationStore implementation.
 from __future__ import annotations
 
 import json
+import mimetypes
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping, Optional, TYPE_CHECKING, Union
@@ -19,6 +21,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 MAX_TURNS_STORED = 50
 MAX_REPORTS_STORED = 20
+MAX_FILE_RECORDS_STORED = 50
 
 
 def _utc_iso() -> str:
@@ -76,6 +79,7 @@ class TurnRecord:
     reflection: dict[str, Any] = field(default_factory=dict)
     structured_data: dict[str, Any] = field(default_factory=dict)
     report: Optional[ReportRecord] = None
+    artifacts: list[FileRecord] = field(default_factory=list)
     created_at: str = field(default_factory=_utc_iso)
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,11 +98,14 @@ class TurnRecord:
         }
         if self.report:
             data["report"] = self.report.to_dict()
+        if self.artifacts:
+            data["artifacts"] = [artifact.to_dict() for artifact in self.artifacts]
         return data
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "TurnRecord":
         report = data.get("report")
+        artifacts = data.get("artifacts", [])
         return cls(
             turn_id=data.get("turn_id", str(uuid4())),
             query=data.get("query", ""),
@@ -111,6 +118,7 @@ class TurnRecord:
             reflection=dict(data.get("reflection", {})),
             structured_data=dict(data.get("structured_data", {})),
             report=ReportRecord.from_dict(report) if isinstance(report, Mapping) else None,
+            artifacts=[FileRecord.from_dict(artifact) for artifact in artifacts if isinstance(artifact, Mapping)],
             created_at=data.get("created_at", _utc_iso()),
         )
 
@@ -123,6 +131,8 @@ class SessionMetadata:
     latest: dict[str, Any] = field(default_factory=dict)
     structured_data: dict[str, Any] = field(default_factory=dict)
     reports: list[ReportRecord] = field(default_factory=list)
+    uploaded_files: list[FileRecord] = field(default_factory=list)
+    artifacts: list[FileRecord] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -130,6 +140,8 @@ class SessionMetadata:
             "latest": self.latest,
             "structured_data": self.structured_data,
             "reports": [report.to_dict() for report in self.reports],
+            "uploaded_files": [record.to_dict() for record in self.uploaded_files],
+            "artifacts": [record.to_dict() for record in self.artifacts],
         }
 
     @classmethod
@@ -154,11 +166,15 @@ class SessionMetadata:
 
         turns_data = payload.get("turns", [])
         reports_data = payload.get("reports", [])
+        uploaded = payload.get("uploaded_files", [])
+        artifacts = payload.get("artifacts", [])
         metadata = cls(
             turns=[TurnRecord.from_dict(turn) for turn in turns_data],
             latest=dict(payload.get("latest", {})),
             structured_data=dict(payload.get("structured_data", {})),
             reports=[ReportRecord.from_dict(report) for report in reports_data],
+            uploaded_files=[FileRecord.from_dict(item) for item in uploaded],
+            artifacts=[FileRecord.from_dict(item) for item in artifacts],
         )
         metadata._truncate()
         return metadata
@@ -170,16 +186,43 @@ class SessionMetadata:
         if turn.report:
             self.reports.append(turn.report)
 
+        if turn.artifacts:
+            self.add_artifacts(turn.artifacts)
+
         if turn.structured_data:
             self._merge_structured(turn.structured_data)
 
         self._truncate()
+
+    def add_uploaded_file(self, record: FileRecord) -> None:
+        self._upsert(self.uploaded_files, record)
+        self._truncate()
+
+    def add_artifacts(self, records: list[FileRecord]) -> None:
+        for record in records:
+            self._upsert(self.artifacts, record)
+        self._truncate()
+
+    def find_file(self, file_id: str) -> Optional[FileRecord]:
+        for bucket in (self.uploaded_files, self.artifacts):
+            for record in bucket:
+                if record.file_id == file_id:
+                    return record
+        return None
 
     def _truncate(self) -> None:
         if len(self.turns) > MAX_TURNS_STORED:
             self.turns = self.turns[-MAX_TURNS_STORED:]
         if len(self.reports) > MAX_REPORTS_STORED:
             self.reports = self.reports[-MAX_REPORTS_STORED:]
+        if len(self.uploaded_files) > MAX_FILE_RECORDS_STORED:
+            self.uploaded_files = self.uploaded_files[-MAX_FILE_RECORDS_STORED:]
+        if len(self.artifacts) > MAX_FILE_RECORDS_STORED:
+            self.artifacts = self.artifacts[-MAX_FILE_RECORDS_STORED:]
+
+    def _upsert(self, bucket: list[FileRecord], record: FileRecord) -> None:
+        bucket[:] = [existing for existing in bucket if existing.file_id != record.file_id]
+        bucket.append(record)
 
     def _merge_structured(self, payload: Mapping[str, Any]) -> None:
         for key, value in payload.items():
@@ -220,6 +263,7 @@ class SessionRecorder:
         reflection: dict[str, Any] = {}
         structured_data: dict[str, Any] = {}
         report_record: Optional[ReportRecord] = None
+        artifacts: list[FileRecord] = []
 
         if state:
             intent_obj = state.get("intent")
@@ -231,6 +275,7 @@ class SessionRecorder:
             reflection = dict(state.get("reflection", {}))
             structured_data = _summarize_results(state.get("results"))
             report_record = _extract_report(state, response)
+            artifacts = _extract_artifacts(state)
 
         turn = TurnRecord(
             turn_id=str(uuid4()),
@@ -244,6 +289,7 @@ class SessionRecorder:
             reflection=reflection,
             structured_data=structured_data,
             report=report_record,
+            artifacts=artifacts,
         )
 
         self.metadata.add_turn(turn)
@@ -348,3 +394,92 @@ def _find_report_preview(result: Mapping[str, Any]) -> Optional[str]:
         if isinstance(summary, str):
             return summary
     return None
+
+
+def _extract_artifacts(state: Mapping[str, Any]) -> list[FileRecord]:
+    results = state.get("results")
+    if not isinstance(results, Mapping):
+        return []
+
+    artifacts: list[FileRecord] = []
+    for task_id, result in results.items():
+        if not isinstance(result, Mapping):
+            continue
+
+        report_path = result.get("report_path")
+        if report_path:
+            artifacts.append(
+                _build_file_record(
+                    path=str(report_path),
+                    description=f"{task_id} report",
+                )
+            )
+
+        output_files = result.get("output_files")
+        if isinstance(output_files, Mapping):
+            for format_name, path in output_files.items():
+                if not isinstance(path, str):
+                    continue
+                artifacts.append(
+                    _build_file_record(
+                        path=path,
+                        description=f"{task_id} ({format_name})",
+                    )
+                )
+
+    return artifacts
+
+
+def _build_file_record(*, path: str, description: Optional[str] = None) -> FileRecord:
+    file_path = os.fspath(path)
+    file_name = os.path.basename(file_path)
+    content_type = mimetypes.guess_type(file_name)[0]
+    size: Optional[int]
+    try:
+        stat = os.stat(file_path)
+        size = stat.st_size
+    except OSError:
+        size = None
+
+    return FileRecord(
+        file_id=str(uuid4()),
+        file_name=file_name or os.path.basename(file_path),
+        file_path=file_path,
+        content_type=content_type,
+        size_bytes=size,
+        description=description,
+    )
+@dataclass
+class FileRecord:
+    """Metadata for user uploaded files and generated artifacts."""
+
+    file_id: str
+    file_name: str
+    file_path: str
+    content_type: Optional[str] = None
+    size_bytes: Optional[int] = None
+    description: Optional[str] = None
+    created_at: str = field(default_factory=_utc_iso)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "file_id": self.file_id,
+            "file_name": self.file_name,
+            "file_path": self.file_path,
+            "content_type": self.content_type,
+            "size_bytes": self.size_bytes,
+            "description": self.description,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "FileRecord":
+        return cls(
+            file_id=str(data.get("file_id", uuid4())),
+            file_name=str(data.get("file_name", "")),
+            file_path=str(data.get("file_path", "")),
+            content_type=data.get("content_type"),
+            size_bytes=data.get("size_bytes"),
+            description=data.get("description"),
+            created_at=data.get("created_at", _utc_iso()),
+        )

@@ -88,6 +88,28 @@ client in `molx_client/`. To exercise the complete flow:
    SSE stream all traverse the running API server. For production builds configure
    `VITE_API_BASE_URL` to point at the deployed FastAPI instance.
 
+## Session files and artifact previews
+
+The FastAPI server now exposes dedicated endpoints so that user uploads are persisted under the
+agent's `artifacts_root/uploads/<session_id>` directory (configure the `uploads_subdir` field in
+`molx_agent/config.py` if you need a different layout). Uploaded files are reflected in the agent
+state so the DataCleaner worker can immediately consume them, and every generated report or
+`output_files` entry is mirrored back into session metadata for previewing.
+
+Available endpoints:
+
+- `POST /api/v1/session/{session_id}/files` — accepts `multipart/form-data` with an
+  `uploaded_file` field and optional `description`, stores the file on disk, and registers it in the
+  session memory.
+- `GET /api/v1/session/{session_id}/files` — lists both user uploads and generated artifacts so the
+  client can present previews or download links.
+- `GET /api/v1/session/{session_id}/files/{file_id}` — streams the binary contents of a tracked
+  file with the correct MIME type for quick HTML/JSON previews.
+
+The session metadata returned by `/session/{id}/data` and `/session/{id}/files` now carries
+`uploaded_files`, `artifacts`, and per-turn artifact summaries so the UI can highlight which report
+belongs to which agent turn.
+
 ## Makefile usage
 
 [`Makefile`](https://github.com/xtalpi.com/molx-agent/blob/main/Makefile) contains a lot of functions for faster development.

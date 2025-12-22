@@ -175,6 +175,9 @@ class SessionTurnRecord(BaseModel):
     report: Optional[SessionReportInfo] = Field(
         None, description="Report information if generated"
     )
+    artifacts: list["SessionFileInfo"] = Field(
+        default_factory=list, description="Artifacts captured during the turn"
+    )
     created_at: datetime = Field(..., description="Turn timestamp")
 
 
@@ -194,6 +197,47 @@ class SessionMetadataResponse(BaseModel):
     turns: list[SessionTurnRecord] = Field(
         default_factory=list, description="Recorded turns"
     )
+    uploaded_files: list["SessionFileInfo"] = Field(
+        default_factory=list, description="User uploaded files tracked for the session"
+    )
+    artifacts: list["SessionFileInfo"] = Field(
+        default_factory=list, description="Generated artifacts available for download"
+    )
+
+
+class SessionFileInfo(BaseModel):
+    """Metadata for uploaded or generated files."""
+
+    file_id: str = Field(..., description="Unique file identifier")
+    file_name: str = Field(..., description="Display name")
+    file_path: str = Field(..., description="Absolute storage path")
+    content_type: Optional[str] = Field(None, description="MIME type if known")
+    size_bytes: Optional[int] = Field(None, description="File size in bytes")
+    description: Optional[str] = Field(None, description="Short description")
+    created_at: datetime = Field(..., description="Upload timestamp")
+
+
+class SessionFileUploadResponse(BaseModel):
+    """Response body when a new file is uploaded."""
+
+    session_id: str = Field(..., description="Session identifier")
+    file: SessionFileInfo = Field(..., description="Registered file metadata")
+
+
+class SessionFileListResponse(BaseModel):
+    """Response model when listing session files."""
+
+    session_id: str = Field(..., description="Session identifier")
+    uploaded_files: list[SessionFileInfo] = Field(
+        default_factory=list, description="User provided files"
+    )
+    artifacts: list[SessionFileInfo] = Field(
+        default_factory=list, description="Generated artifacts"
+    )
+
+
+SessionTurnRecord.model_rebuild()
+SessionMetadataResponse.model_rebuild()
 
 
 # =============================================================================

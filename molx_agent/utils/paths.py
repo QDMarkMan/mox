@@ -44,3 +44,9 @@ def get_tool_output_dir(tool_name: str) -> Path:
     """Directory bucket for tool specific artifacts."""
     safe_name = tool_name.replace(' ', '_')
     return ensure_artifact_dir('tools', safe_name)
+
+
+def get_uploads_dir(session_id: str) -> Path:
+    """Directory reserved for user uploaded files for a session."""
+    settings = get_settings()
+    return ensure_artifact_dir(settings.uploads_subdir, session_id)

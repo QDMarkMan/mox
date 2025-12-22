@@ -18,7 +18,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from molx_server import __version__
 from molx_server.config import get_server_settings
 from molx_server.middleware import APIKeyMiddleware, RequestLoggingMiddleware
-from molx_server.routes import agent_router, health_router, sar_router, session_router
+from molx_server.routes import (
+    agent_router,
+    files_router,
+    health_router,
+    sar_router,
+    session_router,
+)
 from molx_server.session import get_session_manager
 
 
@@ -94,6 +100,7 @@ def create_app() -> FastAPI:
 
     # API routes with version prefix
     app.include_router(agent_router, prefix=settings.api_prefix)
+    app.include_router(files_router, prefix=settings.api_prefix)
     app.include_router(sar_router, prefix=settings.api_prefix)
     app.include_router(session_router, prefix=settings.api_prefix)
 
