@@ -9,12 +9,33 @@ export interface ThinkingInfo {
   message?: string
 }
 
+export interface SessionArtifact {
+  fileId: string
+  fileName: string
+  description?: string
+  contentType?: string
+  sizeBytes?: number
+  createdAt?: string
+  downloadUrl?: string
+  inlineUrl?: string
+}
+
+export interface ReportMetadata {
+  report_path?: string
+  summary?: string
+  preview?: string
+  created_at?: string
+}
+
 export interface StreamingMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   thinking?: ThinkingInfo
   status?: string[]
+  artifacts?: SessionArtifact[]
+  report?: ReportMetadata
+  structuredData?: Record<string, any>
 }
 
 interface UseStreamingChatOptions {
@@ -62,20 +83,53 @@ export function useStreamingChat({
     const controller = new AbortController()
     const loadHistory = async () => {
       try {
-        const response = await fetch(apiUrl(`/api/v1/session/${sessionId}/history`), {
-          signal: controller.signal,
-        })
-        if (!response.ok) {
-          return
+        const [historyResponse, metadataResponse] = await Promise.all([
+          fetch(apiUrl(`/api/v1/session/${sessionId}/history`), {
+            signal: controller.signal,
+          }),
+          fetch(apiUrl(`/api/v1/session/${sessionId}/data`), {
+            signal: controller.signal,
+          }),
+        ])
+
+        let hydrated: StreamingMessage[] = []
+        if (historyResponse.ok) {
+          const history = await historyResponse.json()
+          hydrated = (history?.messages ?? [])
+            .filter((msg: any) => msg.role === 'user' || msg.role === 'agent')
+            .map((msg: any, index: number) => ({
+              id: `${msg.role}-${index}`,
+              role: msg.role === 'agent' ? 'assistant' : 'user',
+              content: msg.content ?? '',
+            }))
         }
-        const data = await response.json()
-        const hydrated: StreamingMessage[] = (data?.messages ?? [])
-          .filter((msg: any) => msg.role === 'user' || msg.role === 'agent')
-          .map((msg: any, index: number) => ({
-            id: `${msg.role}-${index}`,
-            role: msg.role === 'agent' ? 'assistant' : 'user',
-            content: msg.content ?? '',
-          }))
+
+        if (metadataResponse.ok) {
+          const metadata = await metadataResponse.json()
+          const turns = Array.isArray(metadata?.turns) ? metadata.turns : []
+          if (turns.length > 0) {
+            const turnMessages: StreamingMessage[] = []
+            turns.forEach((turn: any, index: number) => {
+              if (turn?.query) {
+                turnMessages.push({
+                  id: `user-turn-${index}`,
+                  role: 'user',
+                  content: turn.query,
+                })
+              }
+              turnMessages.push({
+                id: `assistant-turn-${index}`,
+                role: 'assistant',
+                content: turn?.response ?? '',
+                artifacts: normalizeArtifacts(turn?.artifacts, sessionId),
+                report: turn?.report ?? undefined,
+                structuredData: turn?.structured_data ?? undefined,
+              })
+            })
+            hydrated = turnMessages
+          }
+        }
+
         setMessages(hydrated)
       } catch (historyError) {
         if ((historyError as Error).name !== 'AbortError') {
@@ -149,6 +203,9 @@ export function useStreamingChat({
       let accumulatedContent = ''
       let buffer = ''
       let capturedThinking: ThinkingInfo | null = null
+      let capturedArtifacts: SessionArtifact[] | undefined
+      let capturedReport: ReportMetadata | undefined
+      let capturedStructured: Record<string, any> | undefined
 
       while (true) {
         const { done, value } = await reader.read()
@@ -221,18 +278,46 @@ export function useStreamingChat({
                   )
                 }
                 break
-              
+
               case 'complete':
                 const finalContent = data.result || accumulatedContent
                 setMessages(prev =>
                   prev.map(msg =>
                     msg.id === assistantId
-                      ? { ...msg, content: finalContent, thinking: capturedThinking || undefined }
+                      ? {
+                          ...msg,
+                          content: finalContent,
+                          thinking: capturedThinking || undefined,
+                          artifacts: capturedArtifacts,
+                          report: capturedReport,
+                          structuredData: capturedStructured,
+                        }
                       : msg
                   )
                 )
                 accumulatedContent = finalContent
                 setThinking(null)
+                break
+
+              case 'artifacts':
+                if (data.artifacts || data.report || data.structured_data) {
+                  const artifacts = normalizeArtifacts(data.artifacts, sessionId)
+                  capturedArtifacts = artifacts.length > 0 ? artifacts : undefined
+                  capturedReport = data.report ?? undefined
+                  capturedStructured = data.structured_data ?? undefined
+                  setMessages(prev =>
+                    prev.map(msg =>
+                      msg.id === assistantId
+                        ? {
+                            ...msg,
+                            artifacts: capturedArtifacts,
+                            report: capturedReport,
+                            structuredData: capturedStructured,
+                          }
+                        : msg
+                    )
+                  )
+                }
                 break
               
               case 'status':
@@ -270,6 +355,9 @@ export function useStreamingChat({
         role: 'assistant',
         content: accumulatedContent || 'No response received.',
         thinking: capturedThinking || undefined,
+        artifacts: capturedArtifacts,
+        report: capturedReport,
+        structuredData: capturedStructured,
       }
 
       onFinish?.(finalMessage)
@@ -311,4 +399,31 @@ export function useStreamingChat({
     sendMessage,
     clearMessages,
   }
+}
+
+function normalizeArtifacts(rawArtifacts: any, sessionId?: string | null): SessionArtifact[] {
+  if (!Array.isArray(rawArtifacts)) {
+    return []
+  }
+
+  return rawArtifacts
+    .map((artifact: any) => {
+      if (!artifact?.file_id || !artifact?.file_name) {
+        return null
+      }
+      const basePath = sessionId
+        ? `/api/v1/session/${sessionId}/files/${artifact.file_id}`
+        : undefined
+      return {
+        fileId: artifact.file_id,
+        fileName: artifact.file_name,
+        description: artifact.description ?? undefined,
+        contentType: artifact.content_type ?? undefined,
+        sizeBytes: artifact.size_bytes ?? undefined,
+        createdAt: artifact.created_at ?? undefined,
+        downloadUrl: basePath ? apiUrl(basePath) : undefined,
+        inlineUrl: basePath ? apiUrl(`${basePath}?inline=1`) : undefined,
+      }
+    })
+    .filter((artifact): artifact is SessionArtifact => Boolean(artifact))
 }

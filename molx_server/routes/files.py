@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
 from molx_agent.memory import SessionMetadata, register_uploaded_file
@@ -107,7 +107,14 @@ async def list_session_files(session_id: str) -> SessionFileListResponse:
 
 
 @router.get("/{session_id}/files/{file_id}")
-async def download_session_file(session_id: str, file_id: str) -> FileResponse:
+async def download_session_file(
+    session_id: str,
+    file_id: str,
+    inline: bool = Query(
+        False,
+        description="Return file as inline content when true instead of attachment",
+    ),
+) -> FileResponse:
     """Return the binary contents of a stored session file."""
     session_manager = get_session_manager()
     managed_session = await session_manager.get_session_async(session_id)
@@ -123,8 +130,15 @@ async def download_session_file(session_id: str, file_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="File is missing from storage")
 
     media_type = record.content_type or "application/octet-stream"
-    return FileResponse(
+    response = FileResponse(
         path=record.file_path,
         media_type=media_type,
-        filename=record.file_name,
+        filename=None if inline else record.file_name,
     )
+
+    if inline:
+        response.headers["Content-Disposition"] = (
+            f'inline; filename="{record.file_name}"'
+        )
+
+    return response

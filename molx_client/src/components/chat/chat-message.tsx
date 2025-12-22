@@ -5,6 +5,7 @@
 import { cn } from '@/utils'
 import type { StreamingMessage } from '@/hooks/use-streaming-chat'
 import { MessageContent } from './message-content'
+import { ArtifactPanel } from './artifact-panel'
 
 // SVG Icons as components
 const UserIcon = () => (
@@ -108,6 +109,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
               </div>
             ))}
           </div>
+        )}
+
+        {!isUser && (message.artifacts?.length || message.report) && (
+          <ArtifactPanel artifacts={message.artifacts} report={message.report} />
         )}
 
         {/* Action buttons for assistant messages */}

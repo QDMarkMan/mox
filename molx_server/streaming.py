@@ -11,6 +11,7 @@ import re
 from typing import Any, AsyncGenerator, Callable, Optional
 
 from molx_server.config import get_server_settings
+from molx_agent.memory import SessionMetadata
 
 logger = logging.getLogger(__name__)
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -124,6 +125,8 @@ async def stream_agent_response(
                 yield format_sse_event("error", {"message": str(exc)})
                 break
 
+            latest_payload = _latest_turn_payload(session_data)
+
             for thinking in thinking_events:
                 yield format_sse_event(
                     "thinking",
@@ -146,6 +149,9 @@ async def stream_agent_response(
                     on_token(token)
                 await asyncio.sleep(0.02)
 
+            if latest_payload:
+                yield format_sse_event("artifacts", latest_payload)
+
             yield format_sse_event("complete", {"result": result_text})
             break
 
@@ -167,3 +173,54 @@ async def stream_agent_response(
         executor_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await executor_task
+
+
+def _latest_turn_payload(session_data: Any) -> Optional[dict[str, Any]]:
+    """Return sanitized metadata for the most recent turn."""
+
+    metadata = getattr(session_data, "metadata", None)
+    if metadata is None:
+        return None
+
+    if not isinstance(metadata, SessionMetadata):
+        try:
+            metadata = SessionMetadata.from_dict(metadata)
+            session_data.metadata = metadata
+        except Exception:  # pragma: no cover - defensive conversion
+            return None
+
+    latest = metadata.latest or {}
+    artifacts = []
+    raw_artifacts = latest.get("artifacts")
+    if isinstance(raw_artifacts, list):
+        for record in raw_artifacts:
+            if not isinstance(record, dict):
+                continue
+            file_id = record.get("file_id")
+            file_name = record.get("file_name")
+            if not file_id or not file_name:
+                continue
+            artifacts.append(
+                {
+                    "file_id": file_id,
+                    "file_name": file_name,
+                    "content_type": record.get("content_type"),
+                    "size_bytes": record.get("size_bytes"),
+                    "description": record.get("description"),
+                    "created_at": record.get("created_at"),
+                }
+            )
+
+    payload: dict[str, Any] = {}
+    if artifacts:
+        payload["artifacts"] = artifacts
+
+    report = latest.get("report")
+    if report:
+        payload["report"] = report
+
+    structured = latest.get("structured_data")
+    if structured:
+        payload["structured_data"] = structured
+
+    return payload or None
