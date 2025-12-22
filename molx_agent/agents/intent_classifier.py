@@ -8,6 +8,7 @@
 """
 
 import logging
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
@@ -48,6 +49,14 @@ INTENT_RESPONSES = {
         "如果您有药物设计或分子分析相关的问题，请告诉我！"
     ),
 }
+
+
+@dataclass
+class IntentClassificationResult:
+    intent: Intent
+    confidence: float
+    reasoning: str
+    reasoning_steps: Optional[list[str]] = None
 
 
 INTENT_CLASSIFIER_PROMPT = """You are an AI intent classifier for a SAR (Structure-Activity Relationship) analysis system.
@@ -94,7 +103,7 @@ class IntentClassifierAgent(BaseAgent):
     """AI-based intent classifier agent.
 
     Uses LLM to classify user queries into predefined intent categories.
-    Falls back to a lightweight rule-based approach when the LLM is unavailable.
+    Explicitly requires an available LLM and surfaces the reasoning it received.
     """
 
     def __init__(self, *, enable_llm: Optional[bool] = None) -> None:
@@ -120,28 +129,26 @@ class IntentClassifierAgent(BaseAgent):
             console.print(f"[red]❌ {message}[/]")
             raise RuntimeError(message)
 
+        result = self._classify_with_llm(user_query)
+        return self._apply_result(state, console, result)
+
+    def _can_use_llm(self) -> bool:
+        if self._enable_llm is not None:
+            return self._enable_llm
+        settings = get_settings()
+        api_key = getattr(settings, "LOCAL_OPENAI_API_KEY", "") or ""
+        return bool(api_key.strip())
+
+    def _classify_with_llm(self, user_query: str) -> IntentClassificationResult:
         try:
-            result = invoke_llm(
+            payload = invoke_llm(
                 INTENT_CLASSIFIER_PROMPT,
                 f"User Query: {user_query}",
                 parse_json=True,
             )
-        except Exception as exc:
-            console.print(
-                f"[red]❌ LLM intent classification failed: {exc}. Please retry after fixing the issue.[/]"
-            )
+        except Exception as exc:  # pragma: no cover - defensive path
             logger.error("Intent classification via LLM failed", exc_info=exc)
             raise RuntimeError("Intent classification failed") from exc
-
-        intent_str = result.get("intent", "sar_analysis")
-        confidence = result.get("confidence", 0.5)
-        reasoning = result.get("reasoning", "")
-        raw_steps = result.get("reasoning_steps") or result.get("steps")
-        reasoning_steps: list[str] = []
-        if isinstance(raw_steps, list):
-            reasoning_steps = [str(step).strip() for step in raw_steps if str(step).strip()]
-        elif isinstance(raw_steps, str) and raw_steps.strip():
-            reasoning_steps = [raw_steps.strip()]
 
         intent_map = {
             "sar_analysis": Intent.SAR_ANALYSIS,
@@ -151,50 +158,50 @@ class IntentClassifierAgent(BaseAgent):
             "unsupported": Intent.UNSUPPORTED,
         }
 
-        intent = intent_map.get(intent_str, Intent.SAR_ANALYSIS)
-        logger.info("Classified intent via LLM: %s (%.2f)", intent.value, confidence)
-        return self._apply_result(
-            state,
-            console,
-            intent,
-            confidence,
-            reasoning,
-            reasoning_steps,
-        )
+        intent = intent_map.get(payload.get("intent", "sar_analysis"), Intent.SAR_ANALYSIS)
+        confidence = float(payload.get("confidence", 0.5) or 0.5)
+        reasoning = payload.get("reasoning", "")
+        raw_steps = payload.get("reasoning_steps") or payload.get("steps")
+        reasoning_steps: Optional[list[str]] = None
+        if isinstance(raw_steps, list):
+            cleaned = [str(step).strip() for step in raw_steps if str(step).strip()]
+            reasoning_steps = cleaned or None
+        elif isinstance(raw_steps, str) and raw_steps.strip():
+            reasoning_steps = [raw_steps.strip()]
 
-    def _can_use_llm(self) -> bool:
-        if self._enable_llm is not None:
-            return self._enable_llm
-        settings = get_settings()
-        api_key = getattr(settings, "LOCAL_OPENAI_API_KEY", "") or ""
-        return bool(api_key.strip())
+        logger.info("Classified intent via LLM: %s (%.2f)", intent.value, confidence)
+        return IntentClassificationResult(
+            intent=intent,
+            confidence=confidence,
+            reasoning=reasoning,
+            reasoning_steps=reasoning_steps,
+        )
 
     def _apply_result(
         self,
         state: AgentState,
         console,
-        intent: Intent,
-        confidence: float,
-        reasoning: str,
-        reasoning_steps: Optional[list[str]] = None,
+        result: IntentClassificationResult,
     ) -> AgentState:
-        if reasoning_steps:
+        if result.reasoning_steps:
             console.print("   [dim]Reasoning steps:[/]")
-            for idx, step in enumerate(reasoning_steps, 1):
+            for idx, step in enumerate(result.reasoning_steps, 1):
                 trimmed = step[:160]
                 suffix = "..." if len(step) > 160 else ""
                 console.print(f"      {idx}. {trimmed}{suffix}")
-        if reasoning:
-            trimmed_reason = reasoning[:160]
-            suffix = "..." if len(reasoning) > 160 else ""
+        if result.reasoning:
+            trimmed_reason = result.reasoning[:160]
+            suffix = "..." if len(result.reasoning) > 160 else ""
             console.print(f"   [dim]Summary: {trimmed_reason}{suffix}[/]")
-        console.print(f"   [green]Intent: {intent.value} (confidence: {confidence:.2f})[/]")
+        console.print(
+            f"   [green]Intent: {result.intent.value} (confidence: {result.confidence:.2f})[/]"
+        )
 
-        state["intent"] = intent
-        state["intent_confidence"] = confidence
-        state["intent_reasoning"] = reasoning
-        if reasoning_steps:
-            state["intent_reasoning_steps"] = reasoning_steps
+        state["intent"] = result.intent
+        state["intent_confidence"] = result.confidence
+        state["intent_reasoning"] = result.reasoning
+        if result.reasoning_steps:
+            state["intent_reasoning_steps"] = result.reasoning_steps
         return state
 
     def is_supported(self, intent: Intent) -> bool:

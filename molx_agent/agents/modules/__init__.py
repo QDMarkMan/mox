@@ -2,14 +2,18 @@
 
 from .state import AgentState, Task
 
+
 # Lazy imports for heavy modules
 def _lazy_imports():
-    from molx_agent.agents.molx import build_sar_graph, get_sar_graph, run_sar_agent
+    from .graph import MAX_ITERATIONS, build_sar_graph, get_sar_graph, reset_sar_graph
+    from molx_agent.agents.molx import run_sar_agent
     from .mcp import MCPToolLoader, get_mcp_tools, get_mcp_tools_async, get_mcp_loader
 
     return {
         "build_sar_graph": build_sar_graph,
         "get_sar_graph": get_sar_graph,
+        "reset_sar_graph": reset_sar_graph,
+        "MAX_ITERATIONS": MAX_ITERATIONS,
         "run_sar_agent": run_sar_agent,
         "MCPToolLoader": MCPToolLoader,
         "get_mcp_tools": get_mcp_tools,
@@ -22,6 +26,8 @@ __all__ = [
     "Task",
     "build_sar_graph",
     "get_sar_graph",
+    "reset_sar_graph",
+    "MAX_ITERATIONS",
     "run_sar_agent",
     # MCP
     "MCPToolLoader",

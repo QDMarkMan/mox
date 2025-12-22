@@ -10,7 +10,8 @@
 
 import json
 import logging
-from typing import Optional, Any
+from dataclasses import dataclass
+from typing import Optional, Any, Dict
 
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.llm import invoke_llm
@@ -121,6 +122,21 @@ Return a JSON object with the same format as the original plan:
 """
 
 
+@dataclass
+class PlanResult:
+    reasoning: str
+    tasks: Dict[str, Task]
+
+
+@dataclass
+class ReflectionResult:
+    success: bool
+    summary: str
+    issues: list[str]
+    should_replan: bool
+    replan_reason: str = ""
+
+
 class PlannerAgent(BaseAgent):
     """Planner agent implementing ReAct pattern.
 
@@ -155,34 +171,24 @@ class PlannerAgent(BaseAgent):
         console.print("\n[bold cyan]🧠 THINK: Analyzing query and creating plan...[/]")
 
         try:
-            user_message = f"User query:\n{user_query}\n\nCreate a task plan."
-            result = invoke_llm(PLANNER_SYSTEM_PROMPT, user_message, parse_json=True)
+            plan = self._invoke_planner_llm(user_query)
+            state["plan_reasoning"] = plan.reasoning
+            self._log_plan(console, plan)
 
-            # Show reasoning
-            reasoning = result.get("reasoning", "")
-            if reasoning:
-                console.print(f"[dim]   Reasoning: {reasoning[:200]}...[/]" if len(reasoning) > 200 else f"[dim]   Reasoning: {reasoning}[/]")
-            state["plan_reasoning"] = reasoning
-
-            # Parse tasks
-            tasks: dict[str, Task] = {}
-            for t in result.get("tasks", []):
-                t["status"] = "pending"
-                tasks[t["id"]] = t
-                console.print(f"   • Task: [bold]{t['id']}[/] ({t['type']}) - {t['description'][:50]}...")
-
-            state["tasks"] = tasks
+            state["tasks"] = plan.tasks
             state["results"] = state.get("results", {})
             state["current_task_id"] = self._pick_next_task(state)
             state["iteration"] = state.get("iteration", 0) + 1
 
-            console.print(f"[green]✓ THINK: Created {len(tasks)} tasks (iteration {state['iteration']})[/]")
-            logger.info(f"Planner created {len(tasks)} tasks")
+            console.print(
+                f"[green]✓ THINK: Created {len(plan.tasks)} tasks (iteration {state['iteration']})[/]"
+            )
+            logger.info("Planner created %d tasks", len(plan.tasks))
 
-        except Exception as e:
-            console.print(f"[red]✗ THINK error: {e}[/]")
-            logger.error(f"Planner THINK error: {e}")
-            state["error"] = f"Planner error: {e}"
+        except Exception as exc:
+            console.print(f"[red]✗ THINK error: {exc}[/]")
+            logger.error("Planner THINK error", exc_info=exc)
+            state["error"] = f"Planner error: {exc}"
             state["tasks"] = {}
             state["current_task_id"] = None
 
@@ -203,106 +209,16 @@ class PlannerAgent(BaseAgent):
         console.print("\n[bold yellow]🔍 REFLECT: Evaluating results...[/]")
 
         try:
-            tasks = state.get("tasks", {})
-            results = state.get("results", {})
+            reflection = self._derive_reflection_from_state(state)
+            if reflection is None:
+                reflection = self._invoke_reflection_llm(state)
 
-            # First, check task completion status directly (don't rely on LLM)
-            all_done = all(t.get("status") == "done" for t in tasks.values())
-            has_errors = any(
-                isinstance(results.get(tid), dict) and "error" in results.get(tid, {})
-                for tid in tasks.keys()
-            )
+            self._apply_reflection(console, state, reflection)
 
-            # Check if report was generated (key success indicator)
-            report_generated = False
-            for tid, result in results.items():
-                if isinstance(result, dict):
-                    if result.get("report_path") or result.get("output_files", {}).get("html"):
-                        report_generated = True
-                        break
-
-            # If all tasks done and report generated, mark as success without LLM
-            if all_done and report_generated and not has_errors:
-                summary = f"All {len(tasks)} tasks completed successfully. Report generated."
-                state["reflection"] = {
-                    "success": True,
-                    "summary": summary,
-                    "issues": [],
-                    "should_replan": False,
-                    "replan_reason": ""
-                }
-                console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
-                return state
-
-            # If there are actual errors, report them but don't replan
-            if has_errors:
-                error_tasks = [
-                    tid for tid, r in results.items()
-                    if isinstance(r, dict) and "error" in r
-                ]
-                state["reflection"] = {
-                    "success": False,
-                    "summary": f"Tasks completed with errors in: {error_tasks}",
-                    "issues": [f"Error in {tid}: {results[tid].get('error', 'unknown')}" for tid in error_tasks],
-                    "should_replan": False,  # Don't replan on errors, just report
-                    "replan_reason": ""
-                }
-                console.print(f"[yellow]⚠ REFLECT: Completed with errors in {error_tasks}[/]")
-                return state
-
-            # If all tasks done but no report, that's still success (maybe no reporter task)
-            if all_done:
-                summary = f"All {len(tasks)} tasks completed."
-                state["reflection"] = {
-                    "success": True,
-                    "summary": summary,
-                    "issues": [],
-                    "should_replan": False,
-                    "replan_reason": ""
-                }
-                console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
-                return state
-
-            # Only use LLM if tasks are not all done (unusual case)
-            user_query = state.get("user_query", "")
-            context = f"""
-Original Query: {user_query}
-
-Planned Tasks:
-{json.dumps(list(tasks.values()), indent=2, default=str)[:2000]}
-
-Task Results:
-{json.dumps(results, indent=2, default=str)[:2000]}
-"""
-
-            result = invoke_llm(REFLECT_SYSTEM_PROMPT, context, parse_json=True)
-
-            success = result.get("success", False)
-            summary = result.get("summary", "")
-            issues = result.get("issues", [])
-            should_replan = result.get("should_replan", False)
-
-            # Store reflection
-            state["reflection"] = {
-                "success": success,
-                "summary": summary,
-                "issues": issues,
-                "should_replan": should_replan,
-                "replan_reason": result.get("replan_reason", "")
-            }
-
-            if success:
-                console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
-            else:
-                console.print(f"[yellow]⚠ REFLECT: Issues found - {', '.join(issues)}[/]")
-
-            if should_replan:
-                console.print(f"[yellow]   → Will attempt to optimize plan[/]")
-
-        except Exception as e:
-            console.print(f"[red]✗ REFLECT error: {e}[/]")
-            logger.error(f"Planner REFLECT error: {e}")
-            state["reflection"] = {"success": False, "issues": [str(e)], "should_replan": False}
+        except Exception as exc:
+            console.print(f"[red]✗ REFLECT error: {exc}[/]")
+            logger.error("Planner REFLECT error", exc_info=exc)
+            state["reflection"] = {"success": False, "issues": [str(exc)], "should_replan": False}
 
         return state
 
@@ -330,43 +246,19 @@ Task Results:
         console.print("\n[bold magenta]🔧 OPTIMIZE: Replanning...[/]")
 
         try:
-            user_query = state.get("user_query", "")
-            tasks = state.get("tasks", {})
-            issues = reflection.get("issues", [])
-            reason = reflection.get("replan_reason", "")
-
-            context = f"""
-Original Query: {user_query}
-
-Previous Plan:
-{json.dumps(list(tasks.values()), indent=2, default=str)[:1500]}
-
-Issues Encountered:
-{json.dumps(issues, indent=2)}
-
-Reason for Replanning: {reason}
-
-Create an improved plan that addresses these issues.
-"""
-
-            result = invoke_llm(OPTIMIZE_SYSTEM_PROMPT, context, parse_json=True)
-
-            # Parse new tasks
-            new_tasks: dict[str, Task] = {}
-            for t in result.get("tasks", []):
-                t["status"] = "pending"
-                new_tasks[t["id"]] = t
-
-            if new_tasks:
-                state["tasks"] = new_tasks
+            improved_plan = self._invoke_optimize_llm(state, reflection)
+            if improved_plan.tasks:
+                state["tasks"] = improved_plan.tasks
                 state["current_task_id"] = self._pick_next_task(state)
-                console.print(f"[green]✓ OPTIMIZE: Created new plan with {len(new_tasks)} tasks[/]")
+                console.print(
+                    f"[green]✓ OPTIMIZE: Created new plan with {len(improved_plan.tasks)} tasks"
+                )
             else:
                 console.print("[yellow]⚠ OPTIMIZE: No new tasks generated[/]")
 
-        except Exception as e:
-            console.print(f"[red]✗ OPTIMIZE error: {e}[/]")
-            logger.error(f"Planner OPTIMIZE error: {e}")
+        except Exception as exc:
+            console.print(f"[red]✗ OPTIMIZE error: {exc}[/]")
+            logger.error("Planner OPTIMIZE error", exc_info=exc)
 
         return state
 
@@ -404,3 +296,155 @@ Create an improved plan that addresses these issues.
     def run(self, state: AgentState) -> AgentState:
         """Run the planner (THINK phase only for backward compatibility)."""
         return self.think(state)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _invoke_planner_llm(self, user_query: str) -> PlanResult:
+        user_message = f"User query:\n{user_query}\n\nCreate a task plan."
+        payload = invoke_llm(PLANNER_SYSTEM_PROMPT, user_message, parse_json=True)
+        tasks = self._extract_tasks(payload)
+        reasoning = payload.get("reasoning", "")
+        return PlanResult(reasoning=reasoning, tasks=tasks)
+
+    def _invoke_reflection_llm(self, state: AgentState) -> ReflectionResult:
+        tasks = state.get("tasks", {})
+        results = state.get("results", {})
+        user_query = state.get("user_query", "")
+        context = f"""
+Original Query: {user_query}
+
+Planned Tasks:
+{json.dumps(list(tasks.values()), indent=2, default=str)[:2000]}
+
+Task Results:
+{json.dumps(results, indent=2, default=str)[:2000]}
+"""
+        payload = invoke_llm(REFLECT_SYSTEM_PROMPT, context, parse_json=True)
+        return ReflectionResult(
+            success=payload.get("success", False),
+            summary=payload.get("summary", ""),
+            issues=list(payload.get("issues", [])),
+            should_replan=payload.get("should_replan", False),
+            replan_reason=payload.get("replan_reason", ""),
+        )
+
+    def _invoke_optimize_llm(
+        self, state: AgentState, reflection: dict[str, Any]
+    ) -> PlanResult:
+        user_query = state.get("user_query", "")
+        tasks = state.get("tasks", {})
+        issues = reflection.get("issues", [])
+        reason = reflection.get("replan_reason", "")
+        context = f"""
+Original Query: {user_query}
+
+Previous Plan:
+{json.dumps(list(tasks.values()), indent=2, default=str)[:1500]}
+
+Issues Encountered:
+{json.dumps(issues, indent=2)}
+
+Reason for Replanning: {reason}
+
+Create an improved plan that addresses these issues.
+"""
+        payload = invoke_llm(OPTIMIZE_SYSTEM_PROMPT, context, parse_json=True)
+        return PlanResult(reasoning=payload.get("reasoning", ""), tasks=self._extract_tasks(payload))
+
+    def _extract_tasks(self, payload: dict[str, Any]) -> dict[str, Task]:
+        tasks: dict[str, Task] = {}
+        for raw in payload.get("tasks", []):
+            raw["status"] = "pending"
+            tasks[raw["id"]] = raw
+        return tasks
+
+    def _derive_reflection_from_state(self, state: AgentState) -> Optional[ReflectionResult]:
+        tasks = state.get("tasks", {})
+        results = state.get("results", {})
+        if not tasks:
+            return None
+
+        all_done = all(t.get("status") == "done" for t in tasks.values())
+        has_errors = any(
+            isinstance(results.get(tid), dict) and "error" in results.get(tid, {})
+            for tid in tasks
+        )
+
+        report_generated = any(
+            isinstance(result, dict)
+            and (
+                result.get("report_path")
+                or result.get("output_files", {}).get("html")
+            )
+            for result in results.values()
+        )
+
+        if all_done and report_generated and not has_errors:
+            summary = f"All {len(tasks)} tasks completed successfully. Report generated."
+            return ReflectionResult(True, summary, [], False)
+
+        if has_errors:
+            error_tasks = [
+                tid for tid, res in results.items() if isinstance(res, dict) and "error" in res
+            ]
+            issues = [f"Error in {tid}: {results[tid].get('error', 'unknown')}" for tid in error_tasks]
+            summary = f"Tasks completed with errors in: {error_tasks}"
+            return ReflectionResult(False, summary, issues, False)
+
+        if all_done:
+            summary = f"All {len(tasks)} tasks completed."
+            return ReflectionResult(True, summary, [], False)
+
+        return None
+
+    def _apply_reflection(
+        self, console, state: AgentState, reflection: ReflectionResult
+    ) -> None:
+        state["reflection"] = {
+            "success": reflection.success,
+            "summary": reflection.summary,
+            "issues": reflection.issues,
+            "should_replan": reflection.should_replan,
+            "replan_reason": reflection.replan_reason,
+        }
+
+        if reflection.success:
+            console.print(f"[green]✓ REFLECT: Success - {reflection.summary}[/]")
+        else:
+            issue_text = ", ".join(reflection.issues) or reflection.summary
+            console.print(f"[yellow]⚠ REFLECT: Issues found - {issue_text}[/]")
+
+        if reflection.should_replan:
+            console.print("[yellow]   → Will attempt to optimize plan[/]")
+
+    def _log_plan(self, console, plan: PlanResult) -> None:
+        if plan.reasoning:
+            snippet = plan.reasoning[:200]
+            suffix = "..." if len(plan.reasoning) > 200 else ""
+            console.print(f"[dim]   Reasoning: {snippet}{suffix}[/]")
+        for task in plan.tasks.values():
+            description = task.get("description", "")
+            snippet = description[:50] + ("..." if len(description) > 50 else "")
+            short_name = self._task_short_name(task)
+            detail = snippet if snippet and snippet != short_name else ""
+            detail_suffix = f" - {detail}" if detail else ""
+            console.print(f"   • Task: [bold]{short_name}[/] ({task['type']}){detail_suffix}")
+
+    @staticmethod
+    def _task_short_name(task: Task) -> str:
+        """Return a concise display name for a task based on its metadata."""
+        if name := task.get("name"):
+            base = name.strip()
+        else:
+            description = (task.get("description", "") or "").strip()
+            base = description
+            for stop in (". ", ".", "!", "?"):
+                idx = base.find(stop)
+                if idx > 0:
+                    base = base[:idx]
+                    break
+        if not base:
+            base = task.get("id", "task")
+        base = base.strip()
+        return base[:60] + ("..." if len(base) > 60 else "")
