@@ -108,7 +108,14 @@ class ChatSession:
     def send(self, user_input: str) -> str:
         """Send user input to the agent and get a response."""
         self.state.setdefault("messages", []).append(HumanMessage(content=user_input))
+
+        preserved_uploads = list(self.state.get("uploaded_files", []))
+        preserved_metadata = self.state.get("_memory_metadata")
+
         self.state = self.agent.invoke(user_input, state=self.state)
+        self.state.setdefault("uploaded_files", preserved_uploads)
+        if preserved_metadata and not self.state.get("_memory_metadata"):
+            self.state["_memory_metadata"] = preserved_metadata
         self._last_state = self.state
 
         final_response = self.state.get("final_response", "")
