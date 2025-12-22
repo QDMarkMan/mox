@@ -68,7 +68,7 @@ export function AppSidebar({
                   <img src={MoxLogo} alt="MolX Logo" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold text-md">MolX Agent</span>
+                  <span className="font-semibold text-md">Mox</span>
                   {/* <span className="text-xs text-muted-foreground">v1.0</span> */}
                 </div>
               </a>

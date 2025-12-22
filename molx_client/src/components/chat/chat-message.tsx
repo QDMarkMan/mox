@@ -3,8 +3,8 @@
  * Includes avatar, content, and action buttons for assistant messages.
  */
 import { cn } from '@/utils'
-import ReactMarkdown from 'react-markdown'
 import type { StreamingMessage } from '@/hooks/use-streaming-chat'
+import { MessageContent } from './message-content'
 
 // SVG Icons as components
 const UserIcon = () => (
@@ -61,8 +61,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
     <div
       className={cn(
         "group flex gap-3 rounded-lg p-3 transition-all duration-200 ease-out",
-        "hover:bg-muted/30 hover:shadow-sm",
-        isUser ? "bg-muted/40 hover:bg-muted/50" : ""
+        "hover:bg-muted/30 hover:shadow-sm"
       )}
     >
       {/* Avatar */}
@@ -84,13 +83,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           {isUser ? 'You' : 'MolX Agent'}
         </span>
 
-        <div className="prose prose-sm dark:prose-invert max-w-none break-words text-[14px] leading-relaxed">
-          {isUser ? (
-            <p className="whitespace-pre-wrap m-0">{message.content}</p>
-          ) : (
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          )}
-        </div>
+        <MessageContent content={message.content} isUser={isUser} />
 
         {!isUser && message.thinking && (
           <div className="mt-2 rounded-md border border-amber-200/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-400/40 dark:bg-amber-950/30 dark:text-amber-200">

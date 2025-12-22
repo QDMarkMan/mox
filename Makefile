@@ -72,6 +72,9 @@ cleanup:
 serve:
 	uv run molx-server run
 
+run-client:
+	cd molx_client && npm run dev
+
 help:
 	@echo "lock                                      Lock the dependencies."
 	@echo "install                                   Install the project dependencies."
