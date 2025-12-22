@@ -48,14 +48,8 @@ export function AppSidebar({
 
   // Group sessions by date
   const today = new Date()
-  const todaySessions = sessions.filter(s => {
-    const d = new Date(s.createdAt)
-    return d.toDateString() === today.toDateString()
-  })
-  const olderSessions = sessions.filter(s => {
-    const d = new Date(s.createdAt)
-    return d.toDateString() !== today.toDateString()
-  })
+  const todaySessions = sessions.filter(s => s.lastActivity.toDateString() === today.toDateString())
+  const olderSessions = sessions.filter(s => s.lastActivity.toDateString() !== today.toDateString())
 
   return (
     <Sidebar collapsible="icon">
@@ -133,7 +127,7 @@ export function AppSidebar({
                       tooltip={session.title}
                     >
                       <MessageSquare className="size-4" />
-                      <span>{session.title}</span>
+                      <span>{session.title || 'Untitled session'}</span>
                     </SidebarMenuButton>
                     <SidebarMenuAction
                       onClick={(e) => deleteSession(e, session.id)}
@@ -163,7 +157,7 @@ export function AppSidebar({
                       tooltip={session.title}
                     >
                       <MessageSquare className="size-4" />
-                      <span>{session.title}</span>
+                      <span>{session.title || 'Untitled session'}</span>
                     </SidebarMenuButton>
                     <SidebarMenuAction
                       onClick={(e) => deleteSession(e, session.id)}

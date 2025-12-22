@@ -5,6 +5,7 @@ import json
 from unittest.mock import MagicMock, patch, AsyncMock
 
 from molx_agent.agents.modules.mcp import MCPToolLoader, get_mcp_loader
+import molx_agent.config as agent_config
 
 
 class TestMCPToolLoader:
@@ -33,6 +34,26 @@ class TestMCPToolLoader:
         loader = MCPToolLoader(servers_config=config)
         assert loader.is_configured
         assert loader.get_server_names() == ["test_server"]
+
+    def test_loader_reads_config_from_settings_path(self, tmp_path, monkeypatch) -> None:
+        """Loader should respect MCP_SERVERS_CONFIG path configured via settings."""
+        config_path = tmp_path / "mcp_servers.json"
+        config_payload = {
+            "file_server": {
+                "command": "python",
+                "args": ["./file_server.py"],
+                "transport": "stdio",
+            }
+        }
+        config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+        monkeypatch.setenv("MCP_SERVERS_CONFIG", str(config_path))
+        agent_config.get_settings.cache_clear()
+
+        loader = MCPToolLoader()
+        assert loader.is_configured
+        assert loader.get_server_names() == ["file_server"]
+
+        agent_config.get_settings.cache_clear()
 
     def test_loader_config_from_dict(self) -> None:
         """Test loader initialized with dict config."""

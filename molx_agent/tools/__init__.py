@@ -7,9 +7,23 @@
 **************************************************************************
 """
 
-from molx_agent.agents.modules.tools import get_all_tools, get_tool_names
+from __future__ import annotations
 
-__all__ = [
-    "get_all_tools",
-    "get_tool_names",
-]
+from typing import List
+
+
+def get_all_tools():
+    """Lazily import heavy tool registry when required."""
+    from molx_agent.agents.modules.tools import get_all_tools as _get_all_tools
+
+    return _get_all_tools()
+
+
+def get_tool_names() -> List[str]:
+    """Lazily list tool names."""
+    from molx_agent.agents.modules.tools import get_tool_names as _get_tool_names
+
+    return _get_tool_names()
+
+
+__all__ = ["get_all_tools", "get_tool_names"]

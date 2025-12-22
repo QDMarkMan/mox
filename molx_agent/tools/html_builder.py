@@ -11,7 +11,9 @@ import os
 from datetime import datetime
 from typing import Any
 
-REPORT_DIR = os.path.join(os.getcwd(), "output", "reports")
+from molx_agent.utils.paths import get_reports_dir
+
+REPORT_DIR = str(get_reports_dir())
 
 # =============================================================================
 # CSS Styles
@@ -1464,4 +1466,3 @@ def save_html_report(html: str, filename: str = None) -> str:
         f.write(html)
 
     return filepath
-

@@ -1,0 +1,90 @@
+"""Tests for shared session memory recorder."""
+
+from types import SimpleNamespace
+
+from molx_core.memory import SessionData
+from molx_core.memory.recorder import (
+    ReportRecord,
+    SessionMetadata,
+    SessionRecorder,
+    TurnRecord,
+)
+
+
+def _build_state_with_results() -> dict:
+    """Helper to construct a representative agent state payload."""
+    return {
+        "intent": SimpleNamespace(value="sar_analysis"),
+        "intent_reasoning": "User wants SAR analysis",
+        "intent_confidence": 0.95,
+        "plan_reasoning": "Plan data cleaning → SAR → report",
+        "tasks": {
+            "clean": {
+                "id": "clean",
+                "type": "data_cleaner",
+                "description": "Clean uploaded dataset",
+                "status": "done",
+                "depends_on": [],
+            },
+            "report": {
+                "id": "report",
+                "type": "reporter",
+                "description": "Generate SAR report",
+                "status": "done",
+                "depends_on": ["clean"],
+            },
+        },
+        "results": {
+            "clean": {
+                "compounds": [{"compound_id": "CPD-1"}],
+                "cleaning_stats": {"cleaned_count": 1},
+                "output_files": {"csv": "clean.csv"},
+            },
+            "report": {
+                "report_path": "reports/sar.html",
+                "report_intent": "full_report",
+                "sar_analysis": {"summary": "All good"},
+            },
+        },
+        "reflection": {"success": True, "summary": "complete"},
+    }
+
+
+def test_session_recorder_persists_turn_metadata() -> None:
+    """Recording a turn stores latest snapshot, structured data, and report info."""
+    session = SessionData(session_id="sess-123")
+    recorder = SessionRecorder(session)
+
+    state = _build_state_with_results()
+    recorder.record_turn(query="Analyze aspirin", response="✅ Done", state=state)
+
+    metadata = session.metadata
+    assert metadata.latest["query"] == "Analyze aspirin"
+    assert metadata.latest["response"].startswith("✅")
+
+    structured = metadata.structured_data
+    assert structured["clean"]["compound_count"] == 1
+    assert structured["report"]["report_path"] == "reports/sar.html"
+
+    assert metadata.reports
+    assert metadata.reports[-1].report_path == "reports/sar.html"
+
+
+def test_session_metadata_round_trip() -> None:
+    """SessionMetadata serializes and deserializes consistently."""
+    metadata = SessionMetadata()
+    metadata.add_turn(
+        TurnRecord(
+            turn_id="turn-1",
+            query="Hello",
+            response="World",
+            report=ReportRecord(report_path="reports/sar.html", summary="Summary"),
+        )
+    )
+
+    dumped = metadata.to_dict()
+    restored = SessionMetadata.from_dict(dumped)
+
+    assert len(restored.turns) == 1
+    assert restored.turns[0].query == "Hello"
+    assert restored.reports[0].report_path == "reports/sar.html"

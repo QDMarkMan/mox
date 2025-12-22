@@ -115,6 +115,17 @@ class SessionInfo(BaseModel):
     created_at: datetime = Field(..., description="Session creation time")
     last_activity: datetime = Field(..., description="Last activity time")
     message_count: int = Field(0, description="Number of messages in session")
+    preview: Optional[str] = Field(
+        None, description="Latest user query preview for display"
+    )
+
+
+class SessionListResponse(BaseModel):
+    """Response model for listing sessions."""
+
+    sessions: list[SessionInfo] = Field(
+        default_factory=list, description="Active sessions sorted by activity"
+    )
 
 
 class SessionCreateResponse(BaseModel):
@@ -130,6 +141,58 @@ class SessionHistoryResponse(BaseModel):
     session_id: str = Field(..., description="Session ID")
     messages: list[dict[str, Any]] = Field(
         default_factory=list, description="Conversation history"
+    )
+
+
+class SessionReportInfo(BaseModel):
+    """Report metadata for a session."""
+
+    report_path: str = Field(..., description="Path to generated report")
+    summary: Optional[str] = Field(None, description="High-level summary")
+    preview: Optional[str] = Field(None, description="Preview snippet")
+    created_at: datetime = Field(..., description="Report creation time")
+
+
+class SessionTurnRecord(BaseModel):
+    """Structured turn data stored in session metadata."""
+
+    turn_id: str = Field(..., description="Unique turn identifier")
+    query: str = Field(..., description="User query content")
+    response: str = Field(..., description="Agent response")
+    intent: Optional[str] = Field(None, description="Detected intent value")
+    intent_reasoning: Optional[str] = Field(None, description="Intent reasoning text")
+    intent_confidence: Optional[float] = Field(None, description="Intent confidence score")
+    plan_reasoning: Optional[str] = Field(None, description="Planner reasoning")
+    tasks: list[dict[str, Any]] = Field(
+        default_factory=list, description="Summary of tasks executed"
+    )
+    reflection: dict[str, Any] = Field(
+        default_factory=dict, description="Reflection output"
+    )
+    structured_data: dict[str, Any] = Field(
+        default_factory=dict, description="Structured results captured"
+    )
+    report: Optional[SessionReportInfo] = Field(
+        None, description="Report information if generated"
+    )
+    created_at: datetime = Field(..., description="Turn timestamp")
+
+
+class SessionMetadataResponse(BaseModel):
+    """Response for session metadata retrieval."""
+
+    session_id: str = Field(..., description="Session identifier")
+    latest: dict[str, Any] = Field(
+        default_factory=dict, description="Latest turn snapshot"
+    )
+    structured_data: dict[str, Any] = Field(
+        default_factory=dict, description="Structured data index"
+    )
+    reports: list[SessionReportInfo] = Field(
+        default_factory=list, description="Report metadata entries"
+    )
+    turns: list[SessionTurnRecord] = Field(
+        default_factory=list, description="Recorded turns"
     )
 
 

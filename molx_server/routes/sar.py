@@ -1,9 +1,6 @@
-"""
-SAR analysis API endpoints.
+"""SAR analysis API endpoints."""
 
-Provides dedicated endpoints for Structure-Activity Relationship analysis.
-"""
-
+import asyncio
 import logging
 import time
 from typing import Any
@@ -46,10 +43,12 @@ async def analyze_sar(request: SARAnalysisRequest) -> SARAnalysisResponse:
 
     try:
         # Get or create session
-        session_data = session_manager.get_or_create_session(request.session_id)
+        session_data = await session_manager.get_or_create_session_async(request.session_id)
 
         # Run SAR analysis
-        report, structured = run_sar_agent(request.query)
+        report_state = await asyncio.to_thread(run_sar_agent, request.query)
+        report = report_state.get("final_response", "")
+        structured = report_state.get("results", {})
 
         # Build metadata
         elapsed = time.time() - start_time
@@ -58,12 +57,14 @@ async def analyze_sar(request: SARAnalysisRequest) -> SARAnalysisResponse:
             "analysis_type": "sar",
         }
 
-        return SARAnalysisResponse(
+        response = SARAnalysisResponse(
             report=report,
             structured_data=structured,
             session_id=session_data.session_id,
             metadata=metadata,
         )
+        await session_manager.save_session(session_data)
+        return response
 
     except Exception as e:
         logger.exception(f"SAR analysis failed: {e}")
@@ -88,11 +89,20 @@ async def stream_sar_analysis(request: SARAnalysisRequest) -> StreamingResponse:
     session_manager = get_session_manager()
 
     try:
-        session_data = session_manager.get_or_create_session(request.session_id)
+        session_data = await session_manager.get_or_create_session_async(request.session_id)
 
         # For SAR, we use the general agent streaming
+        async def _stream_with_persist():
+            try:
+                async for event in stream_agent_response(
+                    session_data, f"SAR Analysis: {request.query}"
+                ):
+                    yield event
+            finally:
+                await session_manager.save_session(session_data)
+
         return StreamingResponse(
-            stream_agent_response(session_data, f"SAR Analysis: {request.query}"),
+            _stream_with_persist(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

@@ -1,155 +1,58 @@
-"""
-Streaming support for LangChain agent responses.
+"""Streaming support for LangChain agent responses."""
 
-Provides Server-Sent Events (SSE) generators for streaming output.
-"""
+from __future__ import annotations
 
 import asyncio
+import contextlib
+import io
 import json
 import logging
+import re
 from typing import Any, AsyncGenerator, Callable, Optional
 
-from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.outputs import LLMResult
-
+from molx_server.config import get_server_settings
 
 logger = logging.getLogger(__name__)
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
-class StreamingCallbackHandler(BaseCallbackHandler):
-    """
-    Callback handler for streaming LLM tokens to a queue.
-
-    Used to capture streaming output from LangChain and forward
-    to SSE response generators.
-    """
-
-    def __init__(self, queue: asyncio.Queue) -> None:
-        self.queue = queue
-        self._done = asyncio.Event()
-
-    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        """Handle new token from LLM."""
-        try:
-            self.queue.put_nowait({"type": "token", "content": token})
-        except asyncio.QueueFull:
-            logger.warning("Streaming queue full, dropping token")
-
-    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        """Handle LLM completion."""
-        self.queue.put_nowait({"type": "end", "content": ""})
-        self._done.set()
-
-    def on_llm_error(self, error: Exception, **kwargs: Any) -> None:
-        """Handle LLM error."""
-        self.queue.put_nowait({"type": "error", "content": str(error)})
-        self._done.set()
-
-    def on_chain_end(self, outputs: dict[str, Any], **kwargs: Any) -> None:
-        """Handle chain completion."""
-        pass
-
-    def on_tool_start(
-        self, serialized: dict[str, Any], input_str: str, **kwargs: Any
-    ) -> None:
-        """Handle tool invocation start."""
-        tool_name = serialized.get("name", "unknown")
-        self.queue.put_nowait({
-            "type": "tool_start",
-            "content": f"Using tool: {tool_name}"
-        })
-
-    def on_tool_end(self, output: str, **kwargs: Any) -> None:
-        """Handle tool completion."""
-        self.queue.put_nowait({"type": "tool_end", "content": output[:200]})
-
-    @property
-    def is_done(self) -> bool:
-        return self._done.is_set()
+def _clean_console_line(text: str) -> str:
+    """Strip ANSI sequences and whitespace from console output."""
+    if not text:
+        return ""
+    cleaned = ANSI_ESCAPE_RE.sub("", text)
+    return cleaned.strip()
 
 
-async def create_sse_generator(
-    run_fn: Callable[[], Any],
-    timeout: float = 60.0,
-) -> AsyncGenerator[str, None]:
-    """
-    Create an SSE generator from a synchronous run function.
+class _QueueStream(io.TextIOBase):
+    """File-like object that forwards writes into the SSE event queue."""
 
-    Args:
-        run_fn: Function that runs the agent (should not be async).
-        timeout: Maximum time to wait for completion.
+    def __init__(self, emit: Callable[[str, dict[str, Any]], None]) -> None:
+        self._emit = emit
+        self._buffer = ""
 
-    Yields:
-        SSE-formatted event strings.
-    """
-    queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
-    handler = StreamingCallbackHandler(queue)
+    def write(self, data: str) -> int:  # pragma: no cover - exercised indirectly
+        if not data:
+            return 0
+        text = data.replace("\r", "\n")
+        self._buffer += text
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            cleaned = _clean_console_line(line)
+            if cleaned:
+                self._emit("status", {"message": cleaned})
+        return len(data)
 
-    async def run_in_executor() -> Any:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, run_fn)
-
-    # Start the agent run in background
-    task = asyncio.create_task(run_in_executor())
-
-    try:
-        start_time = asyncio.get_event_loop().time()
-
-        while True:
-            # Check timeout
-            elapsed = asyncio.get_event_loop().time() - start_time
-            if elapsed > timeout:
-                yield format_sse_event("error", {"message": "Timeout exceeded"})
-                break
-
-            # Check if task completed
-            if task.done():
-                # Drain remaining queue items
-                while not queue.empty():
-                    try:
-                        event = queue.get_nowait()
-                        yield format_sse_event(event["type"], {"content": event["content"]})
-                    except asyncio.QueueEmpty:
-                        break
-
-                # Get result or error
-                try:
-                    result = task.result()
-                    yield format_sse_event("complete", {"result": str(result)})
-                except Exception as e:
-                    yield format_sse_event("error", {"message": str(e)})
-                break
-
-            # Get next event from queue
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=0.1)
-                yield format_sse_event(event["type"], {"content": event["content"]})
-
-                if event["type"] in ("end", "error"):
-                    break
-            except asyncio.TimeoutError:
-                continue
-
-    finally:
-        if not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+    def flush(self) -> None:  # pragma: no cover - exercised indirectly
+        if self._buffer:
+            cleaned = _clean_console_line(self._buffer)
+            if cleaned:
+                self._emit("status", {"message": cleaned})
+            self._buffer = ""
 
 
 def format_sse_event(event_type: str, data: dict[str, Any]) -> str:
-    """
-    Format data as an SSE event.
-
-    Args:
-        event_type: Event type identifier.
-        data: Event data dictionary.
-
-    Returns:
-        SSE-formatted string.
-    """
+    """Format data as an SSE event string."""
     json_data = json.dumps(data, ensure_ascii=False)
     return f"event: {event_type}\ndata: {json_data}\n\n"
 
@@ -159,98 +62,108 @@ async def stream_agent_response(
     query: str,
     on_token: Optional[Callable[[str], None]] = None,
 ) -> AsyncGenerator[str, None]:
-    """
-    Stream agent response as SSE events.
+    """Stream agent response as SSE events."""
+    settings = get_server_settings()
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue()
+    thinking_events: list[dict[str, Any]] = []
 
-    Includes thinking events (intent classification, planning) before the response.
-
-    Args:
-        session_data: SessionData containing the ChatSession.
-        query: User query to process.
-        on_token: Optional callback for each token.
-
-    Yields:
-        SSE-formatted event strings.
-    """
-    result_holder: list = []
-    error_holder: list = []
-    thinking_events: list = []
+    def emit(event_type: str, payload: dict[str, Any]) -> None:
+        try:
+            loop.call_soon_threadsafe(queue.put_nowait, (event_type, payload))
+        except RuntimeError:  # pragma: no cover - defensive during shutdown
+            logger.debug("Event loop closed before emitting stream event")
 
     def run_agent() -> str:
-        """Run agent and capture thinking events."""
+        """Execute the blocking chat session and capture console output."""
+        stream = _QueueStream(emit)
+        result: str = ""
         try:
-            # Access chat session
-            chat_session = session_data.chat_session
-            
-            # Capture thinking by running with state access
-            result = chat_session.send(query)
-            
-            # Try to get thinking info from state
-            try:
-                state = getattr(chat_session, '_last_state', None)
-                if state:
-                    intent = state.get('intent')
-                    reasoning = state.get('intent_reasoning', '')
-                    confidence = state.get('intent_confidence', 0)
-                    
-                    if intent and reasoning:
-                        thinking_events.append({
-                            "type": "intent",
-                            "intent": intent.value if hasattr(intent, 'value') else str(intent),
-                            "reasoning": reasoning,
-                            "confidence": confidence,
-                        })
-            except Exception:
-                pass
-            
-            result_holder.append(result)
-            return result
-        except Exception as e:
-            error_holder.append(e)
-            raise
+            with contextlib.redirect_stdout(stream), contextlib.redirect_stderr(stream):
+                result = session_data.chat_session.send(query)
+        finally:
+            stream.flush()
 
-    # Send initial event
+        # Capture thinking metadata from the last state
+        state = getattr(session_data.chat_session, "_last_state", None)
+        if state:
+            intent = state.get("intent")
+            reasoning = state.get("intent_reasoning")
+            confidence = state.get("intent_confidence")
+            if intent or reasoning:
+                thinking_events.append(
+                    {
+                        "intent": getattr(intent, "value", intent),
+                        "reasoning": reasoning,
+                        "confidence": confidence,
+                    }
+                )
+
+        return result
+
     yield format_sse_event("start", {"query": query})
+    yield format_sse_event(
+        "thinking",
+        {"status": "analyzing", "message": "🎯 Analyzing query intent..."},
+    )
 
-    # Send thinking placeholder
-    yield format_sse_event("thinking", {
-        "status": "analyzing",
-        "message": "🎯 Analyzing query intent..."
-    })
+    executor_task = asyncio.create_task(loop.run_in_executor(None, run_agent))
+    start_time = loop.time()
 
-    # Run agent in thread pool
-    loop = asyncio.get_event_loop()
+    while True:
+        if executor_task.done():
+            # Drain any remaining status events before final payload
+            while not queue.empty():
+                event_type, payload = queue.get_nowait()
+                yield format_sse_event(event_type, payload)
 
-    try:
-        # Execute synchronously since ChatSession.send is blocking
-        result = await loop.run_in_executor(None, run_agent)
+            try:
+                result_text = executor_task.result()
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error("Streaming executor error: %s", exc)
+                yield format_sse_event("error", {"message": str(exc)})
+                break
 
-        # Send thinking events if captured
-        for thinking in thinking_events:
-            yield format_sse_event("thinking", {
-                "status": "complete",
-                "intent": thinking.get("intent", ""),
-                "reasoning": thinking.get("reasoning", ""),
-                "confidence": thinking.get("confidence", 0),
-            })
-            await asyncio.sleep(0.05)
+            for thinking in thinking_events:
+                yield format_sse_event(
+                    "thinking",
+                    {
+                        "status": "complete",
+                        "intent": thinking.get("intent"),
+                        "reasoning": thinking.get("reasoning"),
+                        "confidence": thinking.get("confidence"),
+                    },
+                )
+                await asyncio.sleep(0.05)
 
-        # Stream the result in word/token chunks for better UX
-        words = result.split(' ')
-        
-        for i, word in enumerate(words):
-            token = (' ' + word) if i > 0 else word
-            yield format_sse_event("token", {"content": token})
-            
-            if on_token:
-                on_token(token)
-            
-            await asyncio.sleep(0.02)
+            words = result_text.split(" ") if result_text else []
+            for idx, word in enumerate(words):
+                token = (" " + word) if idx > 0 else word
+                if not token:
+                    continue
+                yield format_sse_event("token", {"content": token})
+                if on_token:
+                    on_token(token)
+                await asyncio.sleep(0.02)
 
-        yield format_sse_event("complete", {"result": result})
+            yield format_sse_event("complete", {"result": result_text})
+            break
 
-    except Exception as e:
-        logger.error(f"Streaming error: {e}")
-        yield format_sse_event("error", {"message": str(e)})
+        # Timeout handling
+        elapsed = loop.time() - start_time
+        if elapsed > settings.stream_timeout:
+            logger.warning("Streaming timeout hit after %.2fs", elapsed)
+            executor_task.cancel()
+            yield format_sse_event("error", {"message": "Timeout exceeded"})
+            break
 
+        try:
+            event_type, payload = await asyncio.wait_for(queue.get(), timeout=0.1)
+            yield format_sse_event(event_type, payload)
+        except asyncio.TimeoutError:
+            continue
 
+    if not executor_task.done():
+        executor_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await executor_task

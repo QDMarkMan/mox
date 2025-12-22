@@ -49,7 +49,12 @@ class AgentState(TypedDict, total=False):
     # Results
     results: dict[str, Any]
     final_answer: Optional[str]
+    final_response: Optional[str]
+    plan_reasoning: Optional[str]
+    intent: Any
+    intent_reasoning: Optional[str]
+    intent_confidence: Optional[float]
+    reflection: dict[str, Any]
 
     # Error handling
     error: Optional[str]
-

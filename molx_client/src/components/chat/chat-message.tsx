@@ -4,6 +4,7 @@
  */
 import { cn } from '@/utils'
 import ReactMarkdown from 'react-markdown'
+import type { StreamingMessage } from '@/hooks/use-streaming-chat'
 
 // SVG Icons as components
 const UserIcon = () => (
@@ -45,14 +46,8 @@ const CopyIcon = () => (
   </svg>
 )
 
-export interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-}
-
 interface ChatMessageProps {
-  message: Message
+  message: StreamingMessage
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
@@ -96,6 +91,31 @@ export function ChatMessage({ message }: ChatMessageProps) {
             <ReactMarkdown>{message.content}</ReactMarkdown>
           )}
         </div>
+
+        {!isUser && message.thinking && (
+          <div className="mt-2 rounded-md border border-amber-200/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-400/40 dark:bg-amber-950/30 dark:text-amber-200">
+            {message.thinking.status === 'analyzing'
+              ? (message.thinking.message || 'Analyzing intent…')
+              : (
+                <span>
+                  Intent: <span className="font-semibold">{message.thinking.intent || 'Unknown'}</span>
+                  {message.thinking.confidence !== undefined && (
+                    <span className="ml-1 text-muted-foreground">({Math.round(message.thinking.confidence * 100)}%)</span>
+                  )}
+                </span>
+              )}
+          </div>
+        )}
+
+        {!isUser && message.status && message.status.length > 0 && (
+          <div className="mt-3 max-h-48 overflow-y-auto rounded-md border border-border/50 bg-muted/40 p-2 font-mono text-[12px] leading-5 text-muted-foreground">
+            {message.status.map((line, idx) => (
+              <div key={`${message.id}-status-${idx}`} className="whitespace-pre-wrap">
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Action buttons for assistant messages */}
         {!isUser && (

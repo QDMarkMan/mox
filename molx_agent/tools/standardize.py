@@ -9,7 +9,6 @@
 
 import json
 import logging
-import os
 from datetime import datetime
 from typing import Optional, Any
 
@@ -18,9 +17,9 @@ from pydantic import BaseModel, Field
 from rdkit import Chem
 from rdkit.Chem.MolStandardize import rdMolStandardize
 
-logger = logging.getLogger(__name__)
+from molx_agent.utils.paths import get_tool_output_dir
 
-OUTPUT_DIR = os.path.join(os.getcwd(), "output")
+logger = logging.getLogger(__name__)
 
 
 class StandardizeMolecule(BaseTool):
@@ -180,17 +179,17 @@ class SaveCleanedDataTool(BaseTool):
 
     def _run(self, data: dict, task_id: str = "data_cleaner") -> dict:
         """Save data to files."""
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        output_dir = get_tool_output_dir("data_cleaner")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = f"cleaned_{task_id}_{timestamp}"
 
-        output_files = {}
+        output_files: dict[str, str] = {}
 
         # Save as JSON
-        json_path = os.path.join(OUTPUT_DIR, f"{base_name}.json")
+        json_path = output_dir / f"{base_name}.json"
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        output_files["json"] = json_path
+        output_files["json"] = str(json_path)
 
         # Save compounds as CSV
         compounds = data.get("compounds", [])
@@ -209,9 +208,8 @@ class SaveCleanedDataTool(BaseTool):
                 rows.append(row)
 
             df = pd.DataFrame(rows)
-            csv_path = os.path.join(OUTPUT_DIR, f"{base_name}.csv")
+            csv_path = output_dir / f"{base_name}.csv"
             df.to_csv(csv_path, index=False)
-            output_files["csv"] = csv_path
+            output_files["csv"] = str(csv_path)
 
         return output_files
-

@@ -6,10 +6,11 @@ import { useStreamingChat } from '@/hooks/use-streaming-chat'
 
 interface ChatPanelProps {
   sessionId: string | null
-  onCreateSession?: (initialMessage?: string) => string
+  onCreateSession?: (initialMessage?: string) => Promise<string>
+  onSyncSessionPreview?: (sessionId: string, preview: string) => void
 }
 
-export function ChatPanel({ sessionId, onCreateSession }: ChatPanelProps) {
+export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -36,9 +37,10 @@ export function ChatPanel({ sessionId, onCreateSession }: ChatPanelProps) {
   useEffect(() => {
     if (sessionId && pendingMessage) {
       sendMessage(pendingMessage)
+      onSyncSessionPreview?.(sessionId, pendingMessage)
       setPendingMessage(null)
     }
-  }, [sessionId, pendingMessage, sendMessage])
+  }, [sessionId, pendingMessage, sendMessage, onSyncSessionPreview])
 
   const handleSubmit = useCallback(async (value: string, files?: ChatInputFile[]) => {
     if (!value.trim() && (!files || files.length === 0)) return
@@ -52,14 +54,17 @@ export function ChatPanel({ sessionId, onCreateSession }: ChatPanelProps) {
     if (!sessionId && onCreateSession) {
       // Store the message to send after session is created
       setPendingMessage(value)
-      onCreateSession(value) // Pass message for title generation
+      await onCreateSession(value)
       setInput('')
       return
     }
 
     await sendMessage(value)
+    if (sessionId && onSyncSessionPreview) {
+      onSyncSessionPreview(sessionId, value)
+    }
     setInput('')
-  }, [sessionId, onCreateSession, sendMessage])
+  }, [sessionId, onCreateSession, onSyncSessionPreview, sendMessage])
 
   const handleQuickAction = (actionId: string) => {
     console.log('Quick action:', actionId)

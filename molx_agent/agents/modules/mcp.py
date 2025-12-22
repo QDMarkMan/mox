@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from langchain_core.tools import BaseTool
 
+from molx_agent.config import get_settings
 logger = logging.getLogger(__name__)
 
 
@@ -58,13 +59,21 @@ class MCPToolLoader:
 
     def _load_config(self) -> dict:
         """Load MCP server configuration from environment or file."""
-        # Try environment variable first
-        config_json = os.getenv("MCP_SERVERS_CONFIG")
-        if config_json:
-            try:
-                return json.loads(config_json)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse MCP_SERVERS_CONFIG: {e}")
+        settings = get_settings()
+        config_source = settings.MCP_SERVERS_CONFIG or os.getenv("MCP_SERVERS_CONFIG")
+        if config_source:
+            path_candidate = Path(config_source)
+            if path_candidate.exists():
+                try:
+                    with open(path_candidate, "r", encoding="utf-8") as handle:
+                        return json.load(handle)
+                except (json.JSONDecodeError, OSError) as exc:
+                    logger.warning(f"Failed to load MCP config from {path_candidate}: {exc}")
+            else:
+                try:
+                    return json.loads(config_source)
+                except json.JSONDecodeError as exc:
+                    logger.warning(f"Failed to parse MCP_SERVERS_CONFIG payload: {exc}")
 
         # Try config file
         config_paths = [

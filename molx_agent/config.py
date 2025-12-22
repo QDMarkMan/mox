@@ -2,11 +2,18 @@
 
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENV_FILE = ".env.local" if os.path.exists(".env.local") else ".env"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _default_artifacts_dir() -> str:
+    return str(PROJECT_ROOT / "artifacts")
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -26,6 +33,12 @@ class Settings(BaseSettings):
     # Agent Configuration
     agent_verbose: bool = False
     agent_max_iterations: int = 10
+
+    # Artifact & output configuration
+    artifacts_root: str = Field(default_factory=_default_artifacts_dir)
+    standardize_subdir: str = "standardized"
+    reports_subdir: str = "reports"
+    visualizations_subdir: str = "visualizations"
 
     # MCP (Model Context Protocol) Configuration
     MCP_ENABLED: bool = True

@@ -25,10 +25,12 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors, Draw, rdFMCS
 from rdkit.Chem.Draw import rdMolDraw2D
 
+from molx_agent.utils.paths import get_visualizations_dir
+
 logger = logging.getLogger(__name__)
 
 # Output directory for visualization files
-VIS_OUTPUT_DIR = os.path.join(os.getcwd(), "output", "visualizations")
+VIS_OUTPUT_DIR = str(get_visualizations_dir())
 
 
 # =============================================================================

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from molx_core.memory.store import ConversationStore, SessionData
+from molx_core.memory.recorder import SessionMetadata
 
 
 logger = logging.getLogger(__name__)
@@ -147,7 +148,7 @@ class PostgresStore(ConversationStore):
                 self.INSERT_SQL,
                 uuid_id,
                 json.dumps(session.messages),
-                json.dumps(session.metadata),
+                json.dumps(session.metadata_dict()),
                 session.created_at,
                 session.last_activity,
             )
@@ -169,7 +170,7 @@ class PostgresStore(ConversationStore):
             session = SessionData(
                 session_id=str(row["session_id"]),
                 messages=row["messages"] if row["messages"] else [],
-                metadata=row["metadata"] if row["metadata"] else {},
+                metadata=SessionMetadata.from_dict(row["metadata"]),
                 created_at=row["created_at"],
                 last_activity=row["last_activity"],
             )
@@ -192,7 +193,7 @@ class PostgresStore(ConversationStore):
                 self.UPDATE_SQL,
                 uuid_id,
                 json.dumps(session.messages),
-                json.dumps(session.metadata),
+                json.dumps(session.metadata_dict()),
                 session.last_activity,
             )
             
@@ -202,7 +203,7 @@ class PostgresStore(ConversationStore):
                     self.INSERT_SQL,
                     uuid_id,
                     json.dumps(session.messages),
-                    json.dumps(session.metadata),
+                    json.dumps(session.metadata_dict()),
                     session.created_at,
                     session.last_activity,
                 )
@@ -264,7 +265,7 @@ class PostgresStore(ConversationStore):
                 SessionData(
                     session_id=str(row["session_id"]),
                     messages=row["messages"] if row["messages"] else [],
-                    metadata=row["metadata"] if row["metadata"] else {},
+                    metadata=SessionMetadata.from_dict(row["metadata"]),
                     created_at=row["created_at"],
                     last_activity=row["last_activity"],
                 )

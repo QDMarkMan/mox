@@ -21,7 +21,7 @@ lock:
 	uv lock
 
 install:
-	uv sync --extra dev
+	uv sync --extra dev --extra server
 
 pre-commit-install:
 	uv run pre-commit install

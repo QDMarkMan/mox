@@ -1,9 +1,6 @@
-"""
-Agent API endpoints.
+"""Agent API endpoints."""
 
-Provides endpoints for invoking the MolX agent with sync, streaming, and batch modes.
-"""
-
+import asyncio
 import logging
 import time
 from typing import Any
@@ -44,10 +41,12 @@ async def invoke_agent(request: AgentRequest) -> AgentResponse:
 
     try:
         # Get or create session
-        session_data = session_manager.get_or_create_session(request.session_id)
+        session_data = await session_manager.get_or_create_session_async(request.session_id)
 
         # Execute agent
-        result = session_data.chat_session.send(request.query)
+        result = await asyncio.to_thread(
+            session_data.chat_session.send, request.query
+        )
 
         # Build metadata
         elapsed = time.time() - start_time
@@ -56,13 +55,15 @@ async def invoke_agent(request: AgentRequest) -> AgentResponse:
             "message_count": session_data.message_count,
         }
 
-        return AgentResponse(
+        response = AgentResponse(
             result=result,
             structured_data=None,
             session_id=session_data.session_id,
             metadata=metadata,
             status=AgentStatus.COMPLETED,
         )
+        await session_manager.save_session(session_data)
+        return response
 
     except Exception as e:
         logger.exception(f"Agent invocation failed: {e}")
@@ -86,10 +87,17 @@ async def stream_agent(request: AgentRequest) -> StreamingResponse:
     session_manager = get_session_manager()
 
     try:
-        session_data = session_manager.get_or_create_session(request.session_id)
+        session_data = await session_manager.get_or_create_session_async(request.session_id)
+
+        async def _stream_with_persist():
+            try:
+                async for event in stream_agent_response(session_data, request.query):
+                    yield event
+            finally:
+                await session_manager.save_session(session_data)
 
         return StreamingResponse(
-            stream_agent_response(session_data, request.query),
+            _stream_with_persist(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -115,7 +123,7 @@ async def batch_invoke(request: BatchRequest) -> BatchResponse:
     Processes all queries sequentially and returns aggregated results.
     """
     session_manager = get_session_manager()
-    session_data = session_manager.get_or_create_session(request.session_id)
+    session_data = await session_manager.get_or_create_session_async(request.session_id)
 
     results: list[BatchItemResult] = []
     successful = 0
@@ -123,7 +131,9 @@ async def batch_invoke(request: BatchRequest) -> BatchResponse:
 
     for i, query in enumerate(request.queries):
         try:
-            result = session_data.chat_session.send(query)
+            result = await asyncio.to_thread(
+                session_data.chat_session.send, query
+            )
             results.append(
                 BatchItemResult(
                     index=i,
@@ -146,6 +156,8 @@ async def batch_invoke(request: BatchRequest) -> BatchResponse:
                 )
             )
             failed += 1
+
+    await session_manager.save_session(session_data)
 
     return BatchResponse(
         results=results,

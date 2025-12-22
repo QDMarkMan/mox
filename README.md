@@ -204,6 +204,35 @@ make cleanup
 </p>
 </details>
 
+## Running the API server
+
+MolX 的 FastAPI 后端打包在 `molx_server`，需要安装 server extra：
+
+```bash
+uv sync --extra dev --extra server
+make serve            # 等价于 uv run molx-server run --reload
+```
+
+默认监听 `http://127.0.0.1:8000`，OpenAPI 文档位于 `/docs`。若要自定义主机/端口，可在 `make serve` 前导出 `MOLX_SERVER_HOST/MOLX_SERVER_PORT` 或直接运行 `uv run molx-server run --host 0.0.0.0 --port 9000`。
+
+## Web client preview
+
+`molx_client` 提供基于 React + Vite 的最小聊天界面：
+
+```bash
+cd molx_client
+pnpm install
+echo "VITE_API_BASE=http://localhost:8000/api/v1" > .env.local
+pnpm dev
+```
+
+浏览器访问 `http://localhost:5173` 即可连到本地 API。修改 `VITE_API_BASE` 可指向远程部署。
+
+## Architecture & Docs
+
+- [SAR Agent POC 报告](docs/sar_agent_poc.md)：当前能力、演示流程与下一步计划。
+- [review.md](review.md)：针对 Agent/Mem/Server/Client 的缺陷列表与风险提示。
+
 ## 🛡 License
 
 [![License](https://img.shields.io/github/license/xtalpi.com/molx-agent)](https://github.com/xtalpi.com/molx_agent/blob/main/LICENSE)

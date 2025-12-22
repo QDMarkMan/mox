@@ -10,6 +10,7 @@ import uuid
 from typing import Optional
 
 from molx_agent.agents.molx import ChatSession
+from molx_agent.memory import bind_chat_session
 from molx_core.config import get_core_settings
 from molx_core.memory import (
     ConversationStore,
@@ -35,6 +36,7 @@ class ManagedSession:
         
         # Restore messages from storage
         self._restore_messages()
+        bind_chat_session(self.chat_session, self.session_data)
 
     def _restore_messages(self) -> None:
         """Restore messages from stored session data."""
@@ -114,7 +116,7 @@ class SessionManager:
         Create a new session synchronously.
         
         Returns:
-            New session ID.
+            ManagedSession backed by the configured store.
         """
         session_id = str(uuid.uuid4())
         session_data = SessionData(session_id=session_id)
@@ -123,19 +125,19 @@ class SessionManager:
         logger.debug(f"Created session: {session_id}")
         return session_id
 
-    async def create_session_async(self) -> str:
+    async def create_session_async(self) -> ManagedSession:
         """
         Create a new session with persistence.
         
         Returns:
-            New session ID.
+            ManagedSession backed by the configured store.
         """
         session_id = str(uuid.uuid4())
         session_data = await self.store.create(session_id)
         managed = ManagedSession(session_data)
         self._sessions_cache[session_id] = managed
         logger.debug(f"Created persistent session: {session_id}")
-        return session_id
+        return managed
 
     def get_session(self, session_id: str) -> Optional[ManagedSession]:
         """
@@ -195,6 +197,16 @@ class SessionManager:
         new_id = self.create_session()
         return self._sessions_cache[new_id]
 
+    async def get_or_create_session_async(self, session_id: Optional[str]) -> ManagedSession:
+        """Get or create session with persistence."""
+        if session_id:
+            managed = await self.get_session_async(session_id)
+            if managed:
+                return managed
+
+        managed = await self.create_session_async()
+        return managed
+
     async def save_session(self, session: ManagedSession) -> None:
         """
         Save session state to storage.
@@ -208,6 +220,10 @@ class SessionManager:
         
         await self.store.save(session.session_data)
         logger.debug(f"Saved session: {session.session_id}")
+
+    async def list_sessions(self) -> list[SessionData]:
+        """Return all active sessions from the backing store."""
+        return await self.store.list_sessions()
 
     def delete_session(self, session_id: str) -> bool:
         """

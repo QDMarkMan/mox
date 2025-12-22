@@ -14,9 +14,9 @@ from typing import Optional
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.state import AgentState
 from molx_agent.agents.modules.llm import invoke_llm
+from molx_agent.config import get_settings
 
 logger = logging.getLogger(__name__)
-
 
 class Intent(Enum):
     """User intent categories."""
@@ -79,7 +79,11 @@ Your task is to analyze the user's query and classify their intent.
 ## Response Format:
 Return ONLY a JSON object:
 {
-    "reasoning": "Brief explanation of your classification",
+    "reasoning_steps": [
+        "Short bullet explaining how you interpreted the query",
+        "Another short bullet leading to the final decision"
+    ],
+    "reasoning": "One-sentence justification referencing the steps above",
     "intent": "<category>",
     "confidence": <0.0-1.0>
 }
@@ -88,30 +92,33 @@ Return ONLY a JSON object:
 
 class IntentClassifierAgent(BaseAgent):
     """AI-based intent classifier agent.
-    
+
     Uses LLM to classify user queries into predefined intent categories.
+    Falls back to a lightweight rule-based approach when the LLM is unavailable.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, enable_llm: Optional[bool] = None) -> None:
         super().__init__(
             name="intent_classifier",
             description="Classifies user queries using AI",
         )
+        self._enable_llm = enable_llm
 
     def run(self, state: AgentState) -> AgentState:
-        """Classify user intent.
-        
-        Args:
-            state: Agent state with user_query.
-            
-        Returns:
-            Updated state with classified intent.
-        """
+        """Classify user intent."""
         from rich.console import Console
+
         console = Console()
-        
         user_query = state.get("user_query", "")
         console.print("\n[bold blue]🎯 IntentClassifier: Analyzing query...[/]")
+
+        if not self._can_use_llm():
+            message = (
+                "LLM intent classification is required. Configure LOCAL_OPENAI_API_KEY "
+                "or pass a custom settings object with a valid key."
+            )
+            console.print(f"[red]❌ {message}[/]")
+            raise RuntimeError(message)
 
         try:
             result = invoke_llm(
@@ -119,39 +126,75 @@ class IntentClassifierAgent(BaseAgent):
                 f"User Query: {user_query}",
                 parse_json=True,
             )
+        except Exception as exc:
+            console.print(
+                f"[red]❌ LLM intent classification failed: {exc}. Please retry after fixing the issue.[/]"
+            )
+            logger.error("Intent classification via LLM failed", exc_info=exc)
+            raise RuntimeError("Intent classification failed") from exc
 
-            intent_str = result.get("intent", "sar_analysis")
-            confidence = result.get("confidence", 0.5)
-            reasoning = result.get("reasoning", "")
+        intent_str = result.get("intent", "sar_analysis")
+        confidence = result.get("confidence", 0.5)
+        reasoning = result.get("reasoning", "")
+        raw_steps = result.get("reasoning_steps") or result.get("steps")
+        reasoning_steps: list[str] = []
+        if isinstance(raw_steps, list):
+            reasoning_steps = [str(step).strip() for step in raw_steps if str(step).strip()]
+        elif isinstance(raw_steps, str) and raw_steps.strip():
+            reasoning_steps = [raw_steps.strip()]
 
-            # Map to Intent enum
-            intent_map = {
-                "sar_analysis": Intent.SAR_ANALYSIS,
-                "data_processing": Intent.DATA_PROCESSING,
-                "molecule_query": Intent.MOLECULE_QUERY,
-                "general_chat": Intent.GENERAL_CHAT,
-                "unsupported": Intent.UNSUPPORTED,
-            }
+        intent_map = {
+            "sar_analysis": Intent.SAR_ANALYSIS,
+            "data_processing": Intent.DATA_PROCESSING,
+            "molecule_query": Intent.MOLECULE_QUERY,
+            "general_chat": Intent.GENERAL_CHAT,
+            "unsupported": Intent.UNSUPPORTED,
+        }
 
-            intent = intent_map.get(intent_str, Intent.SAR_ANALYSIS)
-            
-            console.print(f"   [dim]Reasoning: {reasoning[:100]}...[/]" if len(reasoning) > 100 else f"   [dim]Reasoning: {reasoning}[/]")
-            console.print(f"   [green]Intent: {intent.value} (confidence: {confidence:.2f})[/]")
-            
-            # Store in state
-            state["intent"] = intent
-            state["intent_confidence"] = confidence
-            state["intent_reasoning"] = reasoning
-            
-            logger.info(f"Classified intent: {intent.value} ({confidence:.2f})")
+        intent = intent_map.get(intent_str, Intent.SAR_ANALYSIS)
+        logger.info("Classified intent via LLM: %s (%.2f)", intent.value, confidence)
+        return self._apply_result(
+            state,
+            console,
+            intent,
+            confidence,
+            reasoning,
+            reasoning_steps,
+        )
 
-        except Exception as e:
-            console.print(f"[red]✗ IntentClassifier error: {e}[/]")
-            logger.error(f"Intent classification error: {e}")
-            # Default to SAR analysis on error
-            state["intent"] = Intent.SAR_ANALYSIS
-            state["intent_confidence"] = 0.5
+    def _can_use_llm(self) -> bool:
+        if self._enable_llm is not None:
+            return self._enable_llm
+        settings = get_settings()
+        api_key = getattr(settings, "LOCAL_OPENAI_API_KEY", "") or ""
+        return bool(api_key.strip())
 
+    def _apply_result(
+        self,
+        state: AgentState,
+        console,
+        intent: Intent,
+        confidence: float,
+        reasoning: str,
+        reasoning_steps: Optional[list[str]] = None,
+    ) -> AgentState:
+        if reasoning_steps:
+            console.print("   [dim]Reasoning steps:[/]")
+            for idx, step in enumerate(reasoning_steps, 1):
+                trimmed = step[:160]
+                suffix = "..." if len(step) > 160 else ""
+                console.print(f"      {idx}. {trimmed}{suffix}")
+        if reasoning:
+            trimmed_reason = reasoning[:160]
+            suffix = "..." if len(reasoning) > 160 else ""
+            console.print(f"   [dim]Summary: {trimmed_reason}{suffix}[/]")
+        console.print(f"   [green]Intent: {intent.value} (confidence: {confidence:.2f})[/]")
+
+        state["intent"] = intent
+        state["intent_confidence"] = confidence
+        state["intent_reasoning"] = reasoning
+        if reasoning_steps:
+            state["intent_reasoning_steps"] = reasoning_steps
         return state
 
     def is_supported(self, intent: Intent) -> bool:

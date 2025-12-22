@@ -29,7 +29,7 @@ Your role is to analyze user queries and create a plan of tasks (DAG).
 
 ## Available Workers (ONLY THESE THREE TYPES ARE ALLOWED):
 - "data_cleaner": Extract and clean molecular data from files (CSV, Excel, SDF)
-- "sar": SAR analysis (R-group decomposition, scaffold selection)  
+- "sar": SAR analysis (R-group decomposition, scaffold selection)
 - "reporter": Generate HTML reports
 
 IMPORTANT CONSTRAINTS:
@@ -123,7 +123,7 @@ Return a JSON object with the same format as the original plan:
 
 class PlannerAgent(BaseAgent):
     """Planner agent implementing ReAct pattern.
-    
+
     Phases:
     - THINK: Analyze query and create task plan
     - ACT: (Handled by MolxAgent dispatching to workers)
@@ -131,7 +131,7 @@ class PlannerAgent(BaseAgent):
     - OPTIMIZE: Replan if needed
     """
 
-    MAX_ITERATIONS = 3  # Prevent infinite loops
+    MAX_ITERATIONS = 5  # Prevent infinite loops
 
     def __init__(self) -> None:
         super().__init__(
@@ -141,16 +141,16 @@ class PlannerAgent(BaseAgent):
 
     def think(self, state: AgentState) -> AgentState:
         """THINK phase: Analyze query and create task plan.
-        
+
         Args:
             state: Current agent state with user_query.
-            
+
         Returns:
             Updated state with tasks DAG.
         """
         from rich.console import Console
         console = Console()
-        
+
         user_query = state.get("user_query", "")
         console.print("\n[bold cyan]🧠 THINK: Analyzing query and creating plan...[/]")
 
@@ -162,6 +162,7 @@ class PlannerAgent(BaseAgent):
             reasoning = result.get("reasoning", "")
             if reasoning:
                 console.print(f"[dim]   Reasoning: {reasoning[:200]}...[/]" if len(reasoning) > 200 else f"[dim]   Reasoning: {reasoning}[/]")
+            state["plan_reasoning"] = reasoning
 
             # Parse tasks
             tasks: dict[str, Task] = {}
@@ -189,29 +190,29 @@ class PlannerAgent(BaseAgent):
 
     def reflect(self, state: AgentState) -> AgentState:
         """REFLECT phase: Evaluate execution results.
-        
+
         Args:
             state: State with executed task results.
-            
+
         Returns:
             Updated state with reflection.
         """
         from rich.console import Console
         console = Console()
-        
+
         console.print("\n[bold yellow]🔍 REFLECT: Evaluating results...[/]")
 
         try:
             tasks = state.get("tasks", {})
             results = state.get("results", {})
-            
+
             # First, check task completion status directly (don't rely on LLM)
             all_done = all(t.get("status") == "done" for t in tasks.values())
             has_errors = any(
                 isinstance(results.get(tid), dict) and "error" in results.get(tid, {})
                 for tid in tasks.keys()
             )
-            
+
             # Check if report was generated (key success indicator)
             report_generated = False
             for tid, result in results.items():
@@ -219,7 +220,7 @@ class PlannerAgent(BaseAgent):
                     if result.get("report_path") or result.get("output_files", {}).get("html"):
                         report_generated = True
                         break
-            
+
             # If all tasks done and report generated, mark as success without LLM
             if all_done and report_generated and not has_errors:
                 summary = f"All {len(tasks)} tasks completed successfully. Report generated."
@@ -232,11 +233,11 @@ class PlannerAgent(BaseAgent):
                 }
                 console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
                 return state
-            
+
             # If there are actual errors, report them but don't replan
             if has_errors:
                 error_tasks = [
-                    tid for tid, r in results.items() 
+                    tid for tid, r in results.items()
                     if isinstance(r, dict) and "error" in r
                 ]
                 state["reflection"] = {
@@ -248,7 +249,7 @@ class PlannerAgent(BaseAgent):
                 }
                 console.print(f"[yellow]⚠ REFLECT: Completed with errors in {error_tasks}[/]")
                 return state
-            
+
             # If all tasks done but no report, that's still success (maybe no reporter task)
             if all_done:
                 summary = f"All {len(tasks)} tasks completed."
@@ -261,7 +262,7 @@ class PlannerAgent(BaseAgent):
                 }
                 console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
                 return state
-            
+
             # Only use LLM if tasks are not all done (unusual case)
             user_query = state.get("user_query", "")
             context = f"""
@@ -273,14 +274,14 @@ Planned Tasks:
 Task Results:
 {json.dumps(results, indent=2, default=str)[:2000]}
 """
-            
+
             result = invoke_llm(REFLECT_SYSTEM_PROMPT, context, parse_json=True)
-            
+
             success = result.get("success", False)
             summary = result.get("summary", "")
             issues = result.get("issues", [])
             should_replan = result.get("should_replan", False)
-            
+
             # Store reflection
             state["reflection"] = {
                 "success": success,
@@ -289,12 +290,12 @@ Task Results:
                 "should_replan": should_replan,
                 "replan_reason": result.get("replan_reason", "")
             }
-            
+
             if success:
                 console.print(f"[green]✓ REFLECT: Success - {summary}[/]")
             else:
                 console.print(f"[yellow]⚠ REFLECT: Issues found - {', '.join(issues)}[/]")
-                
+
             if should_replan:
                 console.print(f"[yellow]   → Will attempt to optimize plan[/]")
 
@@ -307,25 +308,25 @@ Task Results:
 
     def optimize(self, state: AgentState) -> AgentState:
         """OPTIMIZE phase: Replan if needed.
-        
+
         Args:
             state: State with reflection indicating issues.
-            
+
         Returns:
             Updated state with new plan or same state if optimization not needed.
         """
         from rich.console import Console
         console = Console()
-        
+
         reflection = state.get("reflection", {})
         if not reflection.get("should_replan", False):
             return state
-            
+
         iteration = state.get("iteration", 0)
         if iteration >= self.MAX_ITERATIONS:
             console.print(f"[red]✗ OPTIMIZE: Max iterations ({self.MAX_ITERATIONS}) reached, stopping[/]")
             return state
-            
+
         console.print("\n[bold magenta]🔧 OPTIMIZE: Replanning...[/]")
 
         try:
@@ -333,7 +334,7 @@ Task Results:
             tasks = state.get("tasks", {})
             issues = reflection.get("issues", [])
             reason = reflection.get("replan_reason", "")
-            
+
             context = f"""
 Original Query: {user_query}
 
@@ -347,15 +348,15 @@ Reason for Replanning: {reason}
 
 Create an improved plan that addresses these issues.
 """
-            
+
             result = invoke_llm(OPTIMIZE_SYSTEM_PROMPT, context, parse_json=True)
-            
+
             # Parse new tasks
             new_tasks: dict[str, Task] = {}
             for t in result.get("tasks", []):
                 t["status"] = "pending"
                 new_tasks[t["id"]] = t
-                
+
             if new_tasks:
                 state["tasks"] = new_tasks
                 state["current_task_id"] = self._pick_next_task(state)
@@ -371,7 +372,7 @@ Create an improved plan that addresses these issues.
 
     def should_continue(self, state: AgentState) -> bool:
         """Check if ReAct loop should continue.
-        
+
         Returns True if:
         - There are pending tasks, OR
         - Reflection says should_replan AND iteration < MAX
@@ -381,12 +382,12 @@ Create an improved plan that addresses these issues.
         has_pending = any(t.get("status") == "pending" for t in tasks.values())
         if has_pending:
             return True
-            
+
         # Check if should replan
         reflection = state.get("reflection", {})
         should_replan = reflection.get("should_replan", False)
         iteration = state.get("iteration", 0)
-        
+
         return should_replan and iteration < self.MAX_ITERATIONS
 
     def _pick_next_task(self, state: AgentState) -> Optional[str]:

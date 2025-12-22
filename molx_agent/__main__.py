@@ -71,15 +71,17 @@ def sar(
         try:
             from molx_agent.agents import run_sar_agent
 
-            report, structured = run_sar_agent(query)
+            state = run_sar_agent(query)
         except Exception as e:
             console.print(f"[red]Error:[/] {e}")
             raise typer.Exit(1)
 
+    report = state.get("final_response", "Analysis complete.")
+
     if output_json:
         import json
 
-        console.print(json.dumps(structured, indent=2))
+        console.print(json.dumps(state, indent=2))
     else:
         console.print()
         console.print(Markdown(report))
@@ -125,18 +127,16 @@ def chat(
 
         while True:
             try:
-                # Get user input
                 user_input = Prompt.ask("\n[bold cyan]You[/]")
 
-                # Handle commands
                 if user_input.lower() in ("exit", "quit", "q"):
                     console.print("[yellow]Goodbye![/]")
                     break
-                elif user_input.lower() == "clear":
+                if user_input.lower() == "clear":
                     session.clear()
                     console.print("[green]Conversation history cleared.[/]")
                     continue
-                elif user_input.lower() == "history":
+                if user_input.lower() == "history":
                     history = session.get_history()
                     if history:
                         for msg in history:
@@ -146,14 +146,12 @@ def chat(
                     else:
                         console.print("[dim]No history yet.[/]")
                     continue
-                elif not user_input.strip():
+                if not user_input.strip():
                     continue
 
-                # Get response from agent
                 with console.status("[bold green]Thinking..."):
                     response = session.send(user_input)
 
-                # Display response
                 console.print()
                 console.print(Panel(Markdown(response), title="[bold green]Agent[/]"))
 
@@ -178,4 +176,3 @@ def hello(
 
 if __name__ == "__main__":
     app()
-

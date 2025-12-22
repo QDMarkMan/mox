@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from molx_core.memory.recorder import SessionMetadata
+
 
 @dataclass
 class SessionData:
@@ -24,7 +26,7 @@ class SessionData:
     """
     session_id: str
     messages: list[dict[str, Any]] = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: SessionMetadata = field(default_factory=SessionMetadata)
     created_at: datetime = field(default_factory=datetime.utcnow)
     last_activity: datetime = field(default_factory=datetime.utcnow)
 
@@ -40,6 +42,12 @@ class SessionData:
             "timestamp": datetime.utcnow().isoformat(),
         })
         self.touch()
+
+    def metadata_dict(self) -> dict[str, Any]:
+        """Return metadata as a plain dictionary for serialization."""
+        if isinstance(self.metadata, SessionMetadata):
+            return self.metadata.to_dict()
+        return self.metadata
 
     @property
     def message_count(self) -> int:

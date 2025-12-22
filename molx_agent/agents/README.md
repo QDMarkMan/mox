@@ -27,6 +27,7 @@ The agents support external tools via MCP (Model Context Protocol).
 ### Configuration
 
 1. Create `config/mcp_servers.json`:
+
 ```json
 {
     "chemistry": {
@@ -37,7 +38,8 @@ The agents support external tools via MCP (Model Context Protocol).
 }
 ```
 
-2. Or set environment variable:
+1. Or set environment variable:
+
 ```bash
 export MCP_SERVERS_CONFIG='{"server": {"url": "http://localhost:8000/mcp", "transport": "http"}}'
 ```
@@ -49,4 +51,3 @@ Set `MCP_ENABLED=false` in your `.env` file or environment.
 ### Creating MCP Servers
 
 See `examples/example_mcp_server.py` for a template.
-

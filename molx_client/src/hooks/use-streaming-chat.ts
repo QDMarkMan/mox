@@ -1,18 +1,19 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  thinking?: ThinkingInfo
-}
-
-interface ThinkingInfo {
+export interface ThinkingInfo {
   status: 'analyzing' | 'complete'
   intent?: string
   reasoning?: string
   confidence?: number
   message?: string
+}
+
+export interface StreamingMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  thinking?: ThinkingInfo
+  status?: string[]
 }
 
 interface UseStreamingChatOptions {
@@ -23,7 +24,7 @@ interface UseStreamingChatOptions {
 }
 
 interface UseStreamingChatReturn {
-  messages: Message[]
+  messages: StreamingMessage[]
   input: string
   setInput: (input: string) => void
   isLoading: boolean
@@ -44,18 +45,61 @@ export function useStreamingChat({
   onFinish,
   onError,
 }: UseStreamingChatOptions = {}): UseStreamingChatReturn {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<StreamingMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [thinking, setThinking] = useState<ThinkingInfo | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  useEffect(() => {
+    if (!sessionId) {
+      setMessages([])
+      return
+    }
+
+    const controller = new AbortController()
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(`/api/v1/session/${sessionId}/history`, {
+          signal: controller.signal,
+        })
+        if (!response.ok) {
+          return
+        }
+        const data = await response.json()
+        const hydrated: StreamingMessage[] = (data?.messages ?? [])
+          .filter((msg: any) => msg.role === 'user' || msg.role === 'agent')
+          .map((msg: any, index: number) => ({
+            id: `${msg.role}-${index}`,
+            role: msg.role === 'agent' ? 'assistant' : 'user',
+            content: msg.content ?? '',
+          }))
+        setMessages(hydrated)
+      } catch (historyError) {
+        if ((historyError as Error).name !== 'AbortError') {
+          console.warn('Failed to load session history', historyError)
+        }
+      }
+    }
+
+    loadHistory()
+    return () => controller.abort()
+  }, [sessionId])
+
+  const appendStatus = useCallback((existing: string[] | undefined, value: string) => {
+    const bucket = [...(existing ?? []), value]
+    if (bucket.length > 40) {
+      bucket.shift()
+    }
+    return bucket
+  }, [])
+
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isLoading) return
 
     // Add user message
-    const userMessage: Message = {
+    const userMessage: StreamingMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: content.trim(),
@@ -67,7 +111,7 @@ export function useStreamingChat({
 
     // Create assistant message placeholder
     const assistantId = `assistant-${Date.now()}`
-    const assistantMessage: Message = {
+    const assistantMessage: StreamingMessage = {
       id: assistantId,
       role: 'assistant',
       content: '',
@@ -189,6 +233,18 @@ export function useStreamingChat({
                 setThinking(null)
                 break
               
+              case 'status':
+                if (data.message) {
+                  setMessages(prev =>
+                    prev.map(msg =>
+                      msg.id === assistantId
+                        ? { ...msg, status: appendStatus(msg.status, data.message) }
+                        : msg
+                    )
+                  )
+                }
+                break
+              
               case 'error':
                 throw new Error(data.message || 'Stream error')
               
@@ -235,7 +291,7 @@ export function useStreamingChat({
       setIsLoading(false)
       abortControllerRef.current = null
     }
-  }, [api, sessionId, isLoading, onFinish, onError])
+  }, [api, sessionId, isLoading, onFinish, onError, appendStatus])
 
   const clearMessages = useCallback(() => {
     setMessages([])
