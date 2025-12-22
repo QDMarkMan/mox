@@ -406,24 +406,27 @@ function normalizeArtifacts(rawArtifacts: any, sessionId?: string | null): Sessi
     return []
   }
 
-  return rawArtifacts
-    .map((artifact: any) => {
-      if (!artifact?.file_id || !artifact?.file_name) {
-        return null
-      }
-      const basePath = sessionId
-        ? `/api/v1/session/${sessionId}/files/${artifact.file_id}`
-        : undefined
-      return {
-        fileId: artifact.file_id,
-        fileName: artifact.file_name,
-        description: artifact.description ?? undefined,
-        contentType: artifact.content_type ?? undefined,
-        sizeBytes: artifact.size_bytes ?? undefined,
-        createdAt: artifact.created_at ?? undefined,
-        downloadUrl: basePath ? apiUrl(basePath) : undefined,
-        inlineUrl: basePath ? apiUrl(`${basePath}?inline=1`) : undefined,
-      }
+  const artifacts: SessionArtifact[] = []
+  
+  for (const artifact of rawArtifacts) {
+    if (!artifact?.file_id || !artifact?.file_name) {
+      continue
+    }
+    const basePath = sessionId
+      ? `/api/v1/session/${sessionId}/files/${artifact.file_id}`
+      : undefined
+    
+    artifacts.push({
+      fileId: String(artifact.file_id),
+      fileName: String(artifact.file_name),
+      description: artifact.description ? String(artifact.description) : undefined,
+      contentType: artifact.content_type ? String(artifact.content_type) : undefined,
+      sizeBytes: typeof artifact.size_bytes === 'number' ? artifact.size_bytes : undefined,
+      createdAt: artifact.created_at ? String(artifact.created_at) : undefined,
+      downloadUrl: basePath ? apiUrl(basePath) : undefined,
+      inlineUrl: basePath ? apiUrl(`${basePath}?inline=1`) : undefined,
     })
-    .filter((artifact): artifact is SessionArtifact => Boolean(artifact))
+  }
+
+  return artifacts
 }

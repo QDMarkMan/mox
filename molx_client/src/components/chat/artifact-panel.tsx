@@ -1,6 +1,95 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import * as Lucide from 'lucide-react'
+const { Maximize, Download, Eye, EyeOff, FileText, Table, FileJson, X } = Lucide as any
 import type { SessionArtifact, ReportMetadata } from '@/hooks/use-streaming-chat'
 import { cn } from '@/utils'
+import { Button } from '@/components/ui/button'
+
+interface DataPreviewProps {
+  url: string
+  type: 'json' | 'csv'
+  className?: string
+  fullScreen?: boolean
+}
+
+function DataPreview({ url, type, className, fullScreen }: DataPreviewProps) {
+  const [data, setData] = useState<string | string[][] | any | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = await fetch(url)
+        if (!response.ok) throw new Error('Failed to fetch data')
+        const text = await response.text()
+
+        if (type === 'json') {
+          try {
+            setData(JSON.parse(text))
+          } catch {
+            setData(text)
+          }
+        } else if (type === 'csv') {
+          const rows = text.split('\n').filter(row => row.trim()).map(row => row.split(','))
+          setData(rows)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [url, type])
+
+  if (loading) return <div className="flex items-center justify-center p-8 text-muted-foreground animate-pulse">Loading preview...</div>
+  if (error) return <div className="p-4 text-destructive text-sm">Error: {error}</div>
+  if (!data) return null
+
+  if (type === 'json') {
+    return (
+      <pre className={cn(
+        "p-4 text-xs font-mono overflow-auto bg-muted/30 rounded-md",
+        fullScreen ? "h-full" : "max-h-[32rem]",
+        className
+      )}>
+        {typeof data === 'string' ? data : JSON.stringify(data, null, 2)}
+      </pre>
+    )
+  }
+
+  if (type === 'csv' && Array.isArray(data)) {
+    return (
+      <div className={cn(
+        "overflow-auto bg-background rounded-md border border-border",
+        fullScreen ? "h-full" : "max-h-[32rem]",
+        className
+      )}>
+        <table className="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr className="bg-muted/50 sticky top-0">
+              {data[0]?.map((header: string, i: number) => (
+                <th key={i} className="p-2 border-b border-border font-semibold whitespace-nowrap">{header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.slice(1).map((row: string[], i: number) => (
+              <tr key={i} className="hover:bg-muted/30 transition-colors">
+                {row.map((cell: string, j: number) => (
+                  <td key={j} className="p-2 border-b border-border/50 whitespace-nowrap">{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  return null
+}
 
 interface ArtifactPanelProps {
   artifacts?: SessionArtifact[]
@@ -37,86 +126,148 @@ export function ArtifactPanel({ artifacts, report }: ArtifactPanelProps) {
 
 function ArtifactCard({ artifact }: { artifact: SessionArtifact }) {
   const [expanded, setExpanded] = useState(false)
+  const [fullScreen, setFullScreen] = useState(false)
   const previewable = isPreviewable(artifact)
 
   return (
-    <div className="rounded-md border border-border bg-background/60 p-3 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-medium text-foreground">{artifact.fileName}</div>
-          <div className="text-xs text-muted-foreground">
-            {artifact.description || 'Generated artifact'}
-            {artifact.sizeBytes ? ` • ${formatFileSize(artifact.sizeBytes)}` : ''}
+    <>
+      <div className="rounded-md border border-border bg-background/60 p-3 shadow-sm transition-all hover:shadow-md">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground">
+              {getIcon(artifact)}
+            </div>
+            <div>
+              <div className="text-sm font-medium text-foreground">{artifact.fileName}</div>
+              <div className="text-xs text-muted-foreground">
+                {artifact.description || 'Generated artifact'}
+                {artifact.sizeBytes ? ` • ${formatFileSize(artifact.sizeBytes)}` : ''}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {artifact.downloadUrl && (
+              <Button variant="ghost" size="sm" asChild className="h-8 px-2">
+                <a href={artifact.downloadUrl} target="_blank" rel="noreferrer">
+                  <Download className="mr-1 h-3.5 w-3.5" />
+                  Download
+                </a>
+              </Button>
+            )}
+            {previewable && artifact.inlineUrl && (
+              <Button
+                variant={expanded ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setExpanded(prev => !prev)}
+                className="h-8 px-2"
+              >
+                {expanded ? <EyeOff className="mr-1 h-3.5 w-3.5" /> : <Eye className="mr-1 h-3.5 w-3.5" />}
+                {expanded ? 'Hide' : 'Preview'}
+              </Button>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs">
-          {artifact.downloadUrl && (
-            <a
-              href={artifact.downloadUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md border border-border px-2 py-1 text-foreground transition hover:bg-muted"
-            >
-              Download
-            </a>
-          )}
-          {previewable && artifact.inlineUrl && (
-            <button
-              onClick={() => setExpanded(prev => !prev)}
-              className={cn(
-                'rounded-md border px-2 py-1 transition',
-                expanded ? 'border-primary bg-primary/10 text-primary' : 'border-border text-foreground hover:bg-muted'
-              )}
-            >
-              {expanded ? 'Hide Preview' : 'Preview'}
-            </button>
-          )}
-        </div>
+
+        {expanded && artifact.inlineUrl && (
+          <div className="mt-3 relative group">
+            <div className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8 bg-background/80 backdrop-blur-sm shadow-sm"
+                onClick={() => setFullScreen(true)}
+              >
+                <Maximize className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="overflow-hidden rounded-md border border-border bg-muted/20">
+              {renderPreview(artifact)}
+            </div>
+          </div>
+        )}
       </div>
 
-      {expanded && artifact.inlineUrl && (
-        <div className="mt-3 overflow-hidden rounded-md border border-border bg-muted/50">
-          {renderPreview(artifact)}
+      {/* Custom Full Screen Modal */}
+      {fullScreen && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-background animate-in fade-in duration-200">
+          <div className="flex items-center justify-between border-b border-border p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 text-muted-foreground">
+                {getIcon(artifact)}
+              </div>
+              <h2 className="text-lg font-semibold">{artifact.fileName}</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {artifact.downloadUrl && (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={artifact.downloadUrl} target="_blank" rel="noreferrer">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download
+                  </a>
+                </Button>
+              )}
+              <Button variant="ghost" size="icon" onClick={() => setFullScreen(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-6 bg-muted/5">
+            {renderPreview(artifact, true)}
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
+}
+
+function getIcon(artifact: SessionArtifact) {
+  const type = artifact.contentType || ''
+  if (type.startsWith('image/')) return <Eye className="h-4 w-4" />
+  if (type === 'text/csv') return <Table className="h-4 w-4" />
+  if (type === 'application/json') return <FileJson className="h-4 w-4" />
+  return <FileText className="h-4 w-4" />
 }
 
 function isPreviewable(artifact: SessionArtifact): boolean {
   if (!artifact.contentType) return false
   if (!artifact.inlineUrl) return false
+  const type = artifact.contentType
   return (
-    artifact.contentType.startsWith('image/') ||
-    artifact.contentType === 'text/html' ||
-    artifact.contentType === 'application/pdf' ||
-    artifact.contentType.startsWith('text/')
+    type.startsWith('image/') ||
+    type === 'text/html' ||
+    type === 'application/pdf' ||
+    type.startsWith('text/') ||
+    type === 'application/json' ||
+    type === 'text/csv'
   )
 }
 
-function renderPreview(artifact: SessionArtifact) {
+function renderPreview(artifact: SessionArtifact, fullScreen = false) {
   if (!artifact.inlineUrl) return null
 
-  if (artifact.contentType?.startsWith('image/')) {
-    return <img src={artifact.inlineUrl} alt={artifact.fileName} className="max-h-[32rem] w-full object-contain bg-background" />
+  const type = artifact.contentType || ''
+
+  if (type.startsWith('image/')) {
+    return (
+      <div className={cn("flex items-center justify-center bg-background", fullScreen ? "h-full" : "max-h-[32rem]")}>
+        <img src={artifact.inlineUrl} alt={artifact.fileName} className="max-h-full max-w-full object-contain" />
+      </div>
+    )
   }
 
-  if (artifact.contentType === 'application/pdf') {
-    return (
-      <iframe
-        src={artifact.inlineUrl}
-        title={artifact.fileName}
-        className="h-[32rem] w-full"
-        sandbox="allow-scripts allow-downloads allow-same-origin"
-      />
-    )
+  if (type === 'application/json') {
+    return <DataPreview url={artifact.inlineUrl} type="json" fullScreen={fullScreen} />
+  }
+
+  if (type === 'text/csv') {
+    return <DataPreview url={artifact.inlineUrl} type="csv" fullScreen={fullScreen} />
   }
 
   return (
     <iframe
       src={artifact.inlineUrl}
       title={artifact.fileName}
-      className="h-[32rem] w-full"
+      className={cn("w-full border-none", fullScreen ? "h-full" : "h-[32rem]")}
       sandbox="allow-scripts allow-downloads allow-same-origin"
     />
   )

@@ -79,7 +79,7 @@ export function ChatList({ activeId, onSelect, sessions, onDeleteSession }: Chat
         <div className="mt-3 space-y-1">
           <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground">
             <span className="text-base">🧩</span>
-            <span>Knowledge Garden</span>
+            <span>Knowledge</span>
           </button>
           <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground">
             <span className="text-base">🧭</span>

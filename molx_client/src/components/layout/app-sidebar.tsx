@@ -103,9 +103,9 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Knowledge Garden">
+                <SidebarMenuButton tooltip="Knowledge">
                   <span className="text-sm">📚</span>
-                  <span>Knowledge Garden</span>
+                  <span>Knowledge</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
