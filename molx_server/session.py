@@ -5,10 +5,11 @@ Refactored to use molx_core memory module for storage.
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from molx_agent.agents.molx import ChatSession
 from molx_agent.memory import bind_chat_session
@@ -42,17 +43,45 @@ class ManagedSession:
     def _restore_messages(self) -> None:
         """Restore messages from stored session data."""
         from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-        
-        for msg in self.session_data.messages:
+
+        normalized = self._normalize_messages(self.session_data.messages)
+        self.session_data.messages = normalized
+
+        for msg in normalized:
             role = msg.get("role", "user")
             content = msg.get("content", "")
-            
+
             if role == "user":
                 self.chat_session.state["messages"].append(HumanMessage(content=content))
             elif role == "agent":
                 self.chat_session.state["messages"].append(AIMessage(content=content))
             elif role == "system":
                 self.chat_session.state["messages"].append(SystemMessage(content=content))
+
+    @staticmethod
+    def _normalize_messages(raw_messages: Any) -> list[dict[str, str]]:
+        """Convert serialized messages from storage into dict form."""
+        messages: list[dict[str, str]] = []
+
+        if isinstance(raw_messages, str):
+            try:
+                parsed = json.loads(raw_messages)
+            except json.JSONDecodeError:
+                parsed = [{"role": "agent", "content": raw_messages}]
+            raw_messages = parsed
+
+        if not isinstance(raw_messages, list):
+            return messages
+
+        for entry in raw_messages:
+            if isinstance(entry, dict):
+                role = entry.get("role", "user")
+                content = entry.get("content", "")
+            else:
+                role, content = "agent", str(entry)
+            messages.append({"role": role, "content": content})
+
+        return messages
 
     @property
     def session_id(self) -> str:
