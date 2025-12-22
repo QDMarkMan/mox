@@ -107,7 +107,7 @@ async def stream_agent_response(
         {"status": "analyzing", "message": "🎯 Analyzing query intent..."},
     )
 
-    executor_task = asyncio.create_task(loop.run_in_executor(None, run_agent))
+    executor_task = asyncio.ensure_future(loop.run_in_executor(None, run_agent))
     start_time = loop.time()
 
     while True:
