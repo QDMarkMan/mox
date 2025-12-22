@@ -23,6 +23,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar'
 import type { ChatSession } from '@/App'
+import MoxLogo from '@/assets/logo.png'
 
 interface AppSidebarProps {
   sessionId: string | null
@@ -51,6 +52,10 @@ export function AppSidebar({
   const todaySessions = sessions.filter(s => s.lastActivity.toDateString() === today.toDateString())
   const olderSessions = sessions.filter(s => s.lastActivity.toDateString() !== today.toDateString())
 
+
+
+  // ... imports
+
   return (
     <Sidebar collapsible="icon">
       {/* Header with Branding */}
@@ -59,8 +64,8 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <a href="#">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-lg">
-                  🚀
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg text-primary-foreground text-lg overflow-hidden">
+                  <img src={MoxLogo} alt="MolX Logo" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold text-md">MolX Agent</span>

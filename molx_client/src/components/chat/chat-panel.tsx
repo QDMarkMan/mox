@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { ChatInput, type ChatInputFile } from './chat-input'
 import { WelcomePage } from './welcome-page'
 import { ChatMessage, ChatMessageLoading } from './chat-message'
@@ -14,6 +14,7 @@ export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: 
   const [input, setInput] = useState('')
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const {
     messages,
@@ -26,12 +27,28 @@ export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: 
     }
   })
 
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+  // Track the last message content to detect streaming updates
+  const lastMessageContent = useMemo(() => {
+    const lastMessage = messages[messages.length - 1]
+    return lastMessage?.content || ''
   }, [messages])
+
+  // Auto-scroll to bottom when messages change or content is streaming
+  useEffect(() => {
+    const scrollToBottom = () => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      }
+    }
+
+    // Immediate scroll for better responsiveness
+    scrollToBottom()
+
+    // Delayed scroll to handle layout shifts/images
+    const timeoutId = setTimeout(scrollToBottom, 100)
+    
+    return () => clearTimeout(timeoutId)
+  }, [messages, lastMessageContent, isLoading])
 
   // Send pending message when session is created
   useEffect(() => {
@@ -81,20 +98,23 @@ export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: 
   }
 
   return (
-    <div className="flex h-full flex-col bg-background">
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4" ref={scrollRef}>
-        <div className="mx-auto max-w-3xl space-y-4">
+    <div className="flex h-[100vh] flex-col overflow-hidden bg-background">
+      {/* Messages Area - scrollable */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4" ref={scrollRef}>
+        <div className="mx-auto max-w-3xl space-y-4 pb-4">
           {messages.map((message) => (
             <ChatMessage key={message.id} message={message} />
           ))}
 
           {isLoading && <ChatMessageLoading />}
+
+          {/* Scroll anchor for auto-scroll */}
+          <div ref={messagesEndRef} className="h-px w-full" />
         </div>
       </div>
 
-      {/* Input Area (Only shown in active chat) */}
-      <div className="border-t border-border bg-background/80 p-4 backdrop-blur-sm">
+      {/* Input Area - Fixed at bottom, won't scroll */}
+      <div className="flex-shrink-0 border-t border-border bg-background/95 p-4 backdrop-blur-sm">
         <div className="mx-auto max-w-3xl">
           <ChatInput
             value={input}
@@ -114,3 +134,4 @@ export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: 
     </div>
   )
 }
+
