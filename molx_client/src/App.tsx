@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
 import { SidebarLayout } from '@/components/layout/sidebar-layout'
 import { ChatPanel } from '@/components/chat/chat-panel'
+import { apiUrl } from '@/lib/api'
 
-const SESSION_API = '/api/v1/session'
+const SESSION_API = '/api/v1/session' as const
 
 export interface ChatSession {
   id: string
@@ -20,7 +21,7 @@ export default function App() {
 
   const loadSessions = useCallback(async () => {
     try {
-      const response = await fetch(SESSION_API)
+      const response = await fetch(apiUrl(SESSION_API))
       if (!response.ok) {
         return
       }
@@ -44,7 +45,7 @@ export default function App() {
   }, [loadSessions])
 
   const createSession = useCallback(async (initialMessage?: string) => {
-    const response = await fetch(`${SESSION_API}/create`, { method: 'POST' })
+    const response = await fetch(apiUrl(`${SESSION_API}/create`), { method: 'POST' })
     if (!response.ok) {
       throw new Error('Failed to create session')
     }
@@ -64,7 +65,7 @@ export default function App() {
 
   const deleteSession = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`${SESSION_API}/${id}`, { method: 'DELETE' })
+      const response = await fetch(apiUrl(`${SESSION_API}/${id}`), { method: 'DELETE' })
       if (!response.ok) {
         throw new Error('Failed to delete session')
       }

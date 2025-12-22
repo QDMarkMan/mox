@@ -12,3 +12,11 @@ declare module 'lucide-react' {
   export const Brain: ComponentType<SVGProps<SVGSVGElement>>
   export const Lightbulb: ComponentType<SVGProps<SVGSVGElement>>
 }
+
+interface ImportMetaEnv {
+  readonly VITE_API_BASE_URL?: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}

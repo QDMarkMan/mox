@@ -138,6 +138,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+!molx_client/src/lib/
+!molx_client/src/lib/**
 parts/
 sdist/
 var/

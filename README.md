@@ -67,6 +67,27 @@ source .venv/bin/activate  # Linux/macOS
 molx-agent --help
 ```
 
+## Run the full-stack MVP
+
+The FastAPI server in `molx_server/` now exposes the chat + session APIs consumed by the Vite
+client in `molx_client/`. To exercise the complete flow:
+
+1. Start the backend
+   ```bash
+   uv sync --extra server
+   uv run molx-server run --reload
+   ```
+2. In a new terminal, install and launch the web client
+   ```bash
+   cd molx_client
+   npm install
+   echo "VITE_API_BASE_URL=http://localhost:8000" > .env.local  # optional when using the dev proxy
+   npm run dev
+   ```
+3. Open http://localhost:5173 to chat with the agent. Session creation, history loading, and the
+   SSE stream all traverse the running API server. For production builds configure
+   `VITE_API_BASE_URL` to point at the deployed FastAPI instance.
+
 ## Makefile usage
 
 [`Makefile`](https://github.com/xtalpi.com/molx-agent/blob/main/Makefile) contains a lot of functions for faster development.

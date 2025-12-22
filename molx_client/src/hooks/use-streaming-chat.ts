@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { apiUrl } from '@/lib/api'
 
 export interface ThinkingInfo {
   status: 'analyzing' | 'complete'
@@ -19,7 +20,7 @@ export interface StreamingMessage {
 interface UseStreamingChatOptions {
   api?: string
   sessionId?: string | null
-  onFinish?: (message: Message) => void
+  onFinish?: (message: StreamingMessage) => void
   onError?: (error: Error) => void
 }
 
@@ -61,7 +62,7 @@ export function useStreamingChat({
     const controller = new AbortController()
     const loadHistory = async () => {
       try {
-        const response = await fetch(`/api/v1/session/${sessionId}/history`, {
+        const response = await fetch(apiUrl(`/api/v1/session/${sessionId}/history`), {
           signal: controller.signal,
         })
         if (!response.ok) {
@@ -121,7 +122,8 @@ export function useStreamingChat({
     try {
       abortControllerRef.current = new AbortController()
 
-      const response = await fetch(api, {
+      const endpoint = apiUrl(api)
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -263,7 +265,7 @@ export function useStreamingChat({
       }
 
       // Final message
-      const finalMessage: Message = {
+      const finalMessage: StreamingMessage = {
         id: assistantId,
         role: 'assistant',
         content: accumulatedContent || 'No response received.',

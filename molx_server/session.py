@@ -7,6 +7,7 @@ Refactored to use molx_core memory module for storage.
 import asyncio
 import logging
 import uuid
+from datetime import datetime, timedelta
 from typing import Optional
 
 from molx_agent.agents.molx import ChatSession
@@ -254,23 +255,27 @@ class SessionManager:
         self._sessions_cache.pop(session_id, None)
         return await self.store.delete(session_id)
 
-    def list_sessions(self) -> list[ManagedSession]:
-        """Get all cached sessions."""
+    def list_cached_sessions(self) -> list[ManagedSession]:
+        """Get all cached sessions without hitting the backing store."""
         return list(self._sessions_cache.values())
 
     async def cleanup_expired(self) -> int:
         """Remove expired sessions."""
-        count = await self.store.cleanup_expired(self._settings.session_ttl)
-        
-        # Also clean cache
-        expired = [
-            sid for sid, session in self._sessions_cache.items()
-            if session.session_data.last_activity.timestamp() < 
-               (asyncio.get_event_loop().time() - self._settings.session_ttl)
-        ]
+        ttl_seconds = self._settings.session_ttl
+        count = await self.store.cleanup_expired(ttl_seconds)
+
+        # Also clean cache using wall-clock timestamps
+        ttl_delta = timedelta(seconds=ttl_seconds)
+        now = datetime.utcnow()
+        expired: list[str] = []
+        for sid, session in list(self._sessions_cache.items()):
+            last_activity = session.session_data.last_activity
+            if now - last_activity > ttl_delta:
+                expired.append(sid)
+
         for sid in expired:
             del self._sessions_cache[sid]
-        
+
         return count + len(expired)
 
     async def start_cleanup_task(self) -> None:
