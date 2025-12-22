@@ -32,7 +32,7 @@ class Intent(Enum):
 # Friendly responses for non-SAR intents
 INTENT_RESPONSES = {
     Intent.GENERAL_CHAT: (
-        "您好！👋 我是 SAR 分析助手，专门用于药物设计和分子分析。\n\n"
+        "您好！👋 我是药物设计助手，专门用于药物设计和分子分析。\n\n"
         "我可以帮您：\n"
         "• 分析分子的 SAR（结构-活性关系）\n"
         "• 查询分子属性（分子量、SMILES 等）\n"
