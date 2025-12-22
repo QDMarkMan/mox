@@ -32,7 +32,7 @@ except ImportError:  # pragma: no cover - fallback used in tests
             self._edges = edges
             self._conditionals = conditionals
 
-        def invoke(self, state: AgentState) -> AgentState:
+        def invoke(self, state: AgentState, **kwargs: Any) -> AgentState:
             current = self._entry
             while current != "__end__":
                 node = self._nodes[current]
@@ -141,10 +141,18 @@ class SarGraphNodes:
             state["current_task_id"] = task_id
             task["status"] = "running"
             state = worker.run(state)
+            
+            # Re-fetch task from updated state to avoid stale references if worker replaced the state
+            updated_tasks = state.get("tasks", {})
+            updated_task = updated_tasks.get(task_id, task)
+            
             task_result = state.get("results", {}).get(task_id, {})
-            task["status"] = "error" if task_result.get("error") else "done"
+            updated_task["status"] = "error" if task_result.get("error") else "done"
         except Exception as exc:  # pragma: no cover - safety net
-            task["status"] = "error"
+            # Re-fetch task again for error handling
+            err_tasks = state.get("tasks", {})
+            err_task = err_tasks.get(task_id, task)
+            err_task["status"] = "error"
             state.setdefault("results", {})[task_id] = {"error": str(exc)}
             state["error"] = str(exc)
         finally:

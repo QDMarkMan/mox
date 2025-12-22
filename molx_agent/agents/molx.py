@@ -14,6 +14,7 @@ from molx_agent.agents.modules.graph import (
     MAX_ITERATIONS,
     build_sar_graph,
     get_sar_graph,
+    reset_sar_graph,
 )
 from molx_agent.agents.modules.state import AgentState
 from molx_agent.agents.planner import PlannerAgent
@@ -64,7 +65,7 @@ class MolxAgent(BaseAgent):
         state.setdefault("results", {})
         state.setdefault("tasks", {})
         state.setdefault("uploaded_files", [])
-        return self._graph.invoke(state)
+        return self._graph.invoke(state, config={"recursion_limit": 100})
 
     def invoke(self, user_query: str, *, state: Optional[AgentState] = None) -> AgentState:
         """Convenience helper to run a query with optional persistent state."""
@@ -82,7 +83,7 @@ def run_sar_agent(user_query: str) -> AgentState:
         "results": {},
         "tasks": {},
     }
-    return graph.invoke(initial_state)
+    return graph.invoke(initial_state, config={"recursion_limit": 100})
 
 
 class ChatSession:

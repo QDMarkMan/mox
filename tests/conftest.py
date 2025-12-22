@@ -63,7 +63,7 @@ def _ensure_langgraph_stubs() -> None:
             self.edges = edges
             self.conditionals = conditionals
 
-        def invoke(self, state):
+        def invoke(self, state, **kwargs):
             current = self.entry
             while current != "__end__":
                 fn = self.nodes[current]
