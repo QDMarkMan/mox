@@ -4,6 +4,7 @@ Session management API endpoints.
 Provides endpoints for managing conversation sessions.
 """
 
+import inspect
 import logging
 from datetime import datetime
 from typing import Any, Iterable
@@ -68,7 +69,8 @@ def _sort_sessions(records: Iterable[SessionInfo]) -> list[SessionInfo]:
 async def list_sessions() -> SessionListResponse:
     """Return summary information for all active sessions."""
     session_manager = get_session_manager()
-    records = await session_manager.list_sessions()
+    records_or_coro = session_manager.list_sessions()
+    records = await records_or_coro if inspect.isawaitable(records_or_coro) else records_or_coro
     infos = [_session_info_from_record(record) for record in records]
     return SessionListResponse(sessions=_sort_sessions(infos))
 
