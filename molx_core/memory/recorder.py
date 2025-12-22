@@ -7,9 +7,10 @@ ConversationStore implementation.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping, Optional, TYPE_CHECKING
+from typing import Any, Mapping, Optional, TYPE_CHECKING, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -132,15 +133,31 @@ class SessionMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: Optional[Mapping[str, Any]]) -> "SessionMetadata":
+    def from_dict(cls, data: Optional[Union[Mapping[str, Any], str]]) -> "SessionMetadata":
         if not data:
             return cls()
-        turns_data = data.get("turns", []) if isinstance(data, Mapping) else []
-        reports_data = data.get("reports", []) if isinstance(data, Mapping) else []
+
+        payload: Optional[Mapping[str, Any]]
+        if isinstance(data, Mapping):
+            payload = data
+        elif isinstance(data, str):
+            try:
+                parsed = json.loads(data)
+                payload = parsed if isinstance(parsed, Mapping) else None
+            except json.JSONDecodeError:
+                payload = None
+        else:
+            payload = None
+
+        if not payload:
+            return cls()
+
+        turns_data = payload.get("turns", [])
+        reports_data = payload.get("reports", [])
         metadata = cls(
             turns=[TurnRecord.from_dict(turn) for turn in turns_data],
-            latest=dict(data.get("latest", {})),
-            structured_data=dict(data.get("structured_data", {})),
+            latest=dict(payload.get("latest", {})),
+            structured_data=dict(payload.get("structured_data", {})),
             reports=[ReportRecord.from_dict(report) for report in reports_data],
         )
         metadata._truncate()
