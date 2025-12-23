@@ -46,7 +46,7 @@ export function WelcomePage({ onInputSubmit }: WelcomePageProps) {
             placeholder="Describe your task, e.g., Analyze the SAR of these molecules..."
             showQuickActions={false}
             showAgentMode={true}
-            maxHeight={300}
+            maxHeight={260}
           />
         </div>
 

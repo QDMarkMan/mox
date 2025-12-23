@@ -7,6 +7,26 @@ import type { StreamingMessage } from '@/hooks/use-streaming-chat'
 import { MessageContent } from './message-content'
 import { ArtifactPanel } from './artifact-panel'
 
+/**
+ * Format message timestamp for display.
+ * Shows relative time for recent messages, formatted time for older ones.
+ */
+function formatMessageTime(isoString: string): string {
+  const date = new Date(isoString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHour = Math.floor(diffMs / 3600000)
+
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin} min ago`
+  if (diffHour < 24) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+    date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 // SVG Icons as components
 const UserIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -78,12 +98,29 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
 
       {/* Content */}
       <div className="flex-1 space-y-1 overflow-hidden pt-0.5">
-        <span className={cn(
-          "text-xs font-medium",
-          isUser ? "text-muted-foreground" : "text-primary"
-        )}>
-          {isUser ? 'You' : 'Molx Agent'}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "text-xs font-bold",
+            isUser ? "text-muted-foreground" : "text-primary"
+          )}>
+            {isUser ? 'You' : 'Molx Agent'}
+          </span>
+          {message.createdAt && (
+            <span className="text-[10px] text-muted-foreground/60">
+              {formatMessageTime(message.createdAt)}
+            </span>
+          )}
+        </div>
+
+        {!isUser && message.status && message.status.length > 0 && (
+          <div className="mt-3 max-h-48 overflow-y-auto rounded-md border border-border/50 bg-muted/40 p-2 font-mono text-[12px] leading-5 text-muted-foreground">
+            {message.status.map((line, idx) => (
+              <div key={`${message.id}-status-${idx}`} className="whitespace-pre-wrap">
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
 
         <MessageContent content={message.content} isUser={isUser} />
 
@@ -116,15 +153,6 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
           <ArtifactPanel artifacts={message.artifacts} report={message.report} />
         )}
 
-        {!isUser && message.status && message.status.length > 0 && (
-          <div className="mt-3 max-h-48 overflow-y-auto rounded-md border border-border/50 bg-muted/40 p-2 font-mono text-[12px] leading-5 text-muted-foreground">
-            {message.status.map((line, idx) => (
-              <div key={`${message.id}-status-${idx}`} className="whitespace-pre-wrap">
-                {line}
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* Action buttons for assistant messages */}
         {!isUser && (

@@ -174,7 +174,7 @@ export function ChatList({ activeId, onSelect, sessions, onDeleteSession }: Chat
           </div>
           <div className="flex flex-1 flex-col overflow-hidden">
             <span className="truncate text-[13px] font-medium">User</span>
-            <span className="truncate text-[10px] text-muted-foreground">Pro Plan</span>
+            <span className="truncate text-[10px] text-muted-foreground">user@example.com</span>
           </div>
           <span className="text-muted-foreground text-xs">⚙️</span>
         </div>

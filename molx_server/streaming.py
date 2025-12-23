@@ -178,14 +178,16 @@ async def stream_agent_response(
 def _latest_turn_payload(session_data: Any) -> Optional[dict[str, Any]]:
     """Return sanitized metadata for the most recent turn."""
 
-    metadata = getattr(session_data, "metadata", None)
+    # session_data is ManagedSession, access metadata via session_data.session_data.metadata
+    underlying = getattr(session_data, "session_data", session_data)
+    metadata = getattr(underlying, "metadata", None)
     if metadata is None:
         return None
 
     if not isinstance(metadata, SessionMetadata):
         try:
             metadata = SessionMetadata.from_dict(metadata)
-            session_data.metadata = metadata
+            underlying.metadata = metadata
         except Exception:  # pragma: no cover - defensive conversion
             return None
 

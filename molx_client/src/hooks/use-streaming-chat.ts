@@ -31,6 +31,7 @@ export interface StreamingMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  createdAt?: string
   thinking?: ThinkingInfo
   status?: string[]
   artifacts?: SessionArtifact[]
@@ -183,6 +184,7 @@ export function useStreamingChat({
       id: `user-${Date.now()}`,
       role: 'user',
       content: content.trim(),
+      createdAt: new Date().toISOString(),
     }
     setMessages(prev => [...prev, userMessage])
     setIsLoading(true)
@@ -195,6 +197,7 @@ export function useStreamingChat({
       id: assistantId,
       role: 'assistant',
       content: '',
+      createdAt: new Date().toISOString(),
     }
     setMessages(prev => [...prev, assistantMessage])
 

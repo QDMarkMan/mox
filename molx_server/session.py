@@ -251,6 +251,11 @@ class SessionManager:
         history = session.chat_session.get_history()
         session.session_data.messages = history
         
+        # Debug: Log metadata state before save
+        metadata = session.session_data.metadata
+        if hasattr(metadata, 'latest'):
+            logger.debug(f"Saving session {session.session_id}, latest query: {metadata.latest.get('query', 'N/A')[:50] if metadata.latest else 'EMPTY'}")
+        
         await self.store.save(session.session_data)
         logger.debug(f"Saved session: {session.session_id}")
 

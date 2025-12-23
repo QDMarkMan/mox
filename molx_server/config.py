@@ -60,7 +60,7 @@ class ServerSettings(BaseSettings):
 
     # Streaming settings
     stream_chunk_size: int = 1
-    stream_timeout: float = 60.0
+    stream_timeout: float = 180.0  # Increased for AI summary generation
 
 
 @lru_cache

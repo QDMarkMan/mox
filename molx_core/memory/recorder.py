@@ -293,6 +293,12 @@ class SessionRecorder:
         )
 
         self.metadata.add_turn(turn)
+        
+        # Debug: Verify latest was set
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Recorded turn with query: {query[:50]}..., latest.query = {self.metadata.latest.get('query', 'MISSING')[:30]}...")
+        
         return turn
 
 
