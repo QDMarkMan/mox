@@ -227,18 +227,45 @@ class DataCleanerAgent(BaseAgent):
                 if not smiles or smiles.lower() in ['nan', 'none', '']:
                     continue
                 
+                # Get compound ID from name column or generate one
+                compound_id = None
+                if name_col and pd.notna(row.get(name_col)):
+                    compound_id = str(row[name_col])
+                if not compound_id:
+                    compound_id = f"Cpd-{idx+1}"
+                
+                # Build activities dict and get primary activity
+                activities = {}
+                primary_activity = None
+                
+                for act_col in activity_cols:
+                    if act_col in df.columns and pd.notna(row.get(act_col)):
+                        val = row[act_col]
+                        try:
+                            # Handle string values like ">200"
+                            if isinstance(val, str):
+                                val_clean = val.replace('>', '').replace('<', '').strip()
+                                float_val = float(val_clean)
+                            else:
+                                float_val = float(val)
+                            
+                            activities[act_col] = float_val
+                            if primary_activity is None:
+                                primary_activity = float_val
+                        except (ValueError, TypeError):
+                            # Keep original value if cannot parse
+                            activities[act_col] = val
+                
                 compound = {
                     "smiles": smiles,
-                    "name": str(row[name_col]) if name_col and pd.notna(row.get(name_col)) else f"compound_{idx+1}",
+                    "compound_id": compound_id,
+                    "name": compound_id,
+                    "activity": primary_activity,
+                    "activities": activities,
                     "properties": {},
                 }
                 
-                # Add activity values
-                for act_col in activity_cols:
-                    if act_col in df.columns and pd.notna(row.get(act_col)):
-                        compound["properties"][act_col] = row[act_col]
-                
-                # Add other columns as properties
+                # Add other columns as properties (exclude smiles, name, and activity columns)
                 for col in df.columns:
                     if col not in [smiles_col, name_col] + activity_cols:
                         if pd.notna(row.get(col)):
@@ -252,6 +279,7 @@ class DataCleanerAgent(BaseAgent):
                 "compounds": compounds,
                 "columns": column_mapping,
                 "source": "inline_csv",
+                "activity_columns": activity_cols,  # Pass activity columns for downstream use
             }
             
         except Exception as e:

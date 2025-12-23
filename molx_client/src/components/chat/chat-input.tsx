@@ -66,6 +66,7 @@ interface ChatInputProps {
   // Display configuration
   variant?: 'default' | 'welcome'
   rows?: number
+  maxHeight?: number // Maximum height in pixels for the textarea
   // Feature toggles
   showQuickActions?: boolean
   showAgentMode?: boolean
@@ -82,6 +83,7 @@ export function ChatInput({
   placeholder = 'Give MolX a task, let it plan, call tools, and execute for you...',
   variant = 'default',
   rows = 1,
+  maxHeight,
   showQuickActions = false,
   showAgentMode = false,
   showKnowledgeBase = false,
@@ -100,9 +102,12 @@ export function ChatInput({
   useEffect(() => {
     if (textareaRef.current && isWelcome) {
       textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+      const scrollHeight = textareaRef.current.scrollHeight
+      textareaRef.current.style.height = maxHeight
+        ? `${Math.min(scrollHeight, maxHeight)}px`
+        : `${scrollHeight}px`
     }
-  }, [value, isWelcome])
+  }, [value, isWelcome, maxHeight])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files
@@ -191,7 +196,7 @@ export function ChatInput({
               //     ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
               //     : "bg-muted text-muted-foreground"
               // )}
-              className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 text-white shadow-sm shadow-purple-500/20"
+              className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium bg-gradient-to-r from-[#B5FF00] to-[#FDBC85] text-gray-900 shadow-sm shadow-[#B5FF00]/20"
 
             >
               <span className="text-sm">🤖</span>
@@ -235,9 +240,11 @@ export function ChatInput({
           placeholder={placeholder}
           disabled={disabled}
           rows={textareaRows}
+          style={maxHeight ? { maxHeight: `${maxHeight}px` } : undefined}
           className={cn(
             "w-full resize-none bg-transparent text-foreground placeholder:text-muted-foreground/60 focus:outline-none",
-            isWelcome ? "text-[15px] leading-relaxed" : "text-sm leading-normal"
+            isWelcome ? "text-[15px] leading-relaxed" : "text-sm leading-normal",
+            maxHeight && "overflow-y-auto"
           )}
           onKeyDown={handleKeyDown}
         />

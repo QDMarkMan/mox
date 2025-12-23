@@ -49,9 +49,10 @@ const CopyIcon = () => (
 
 interface ChatMessageProps {
   message: StreamingMessage
+  isLoading?: boolean
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
   const isUser = message.role === 'user'
 
   const handleCopy = () => {
@@ -86,6 +87,15 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
         <MessageContent content={message.content} isUser={isUser} />
 
+        {/* Inline loading indicator for streaming messages */}
+        {!isUser && isLoading && (
+          <div className="mt-2 inline-flex items-center gap-1">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50" style={{ animationDelay: '0ms' }} />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50" style={{ animationDelay: '150ms' }} />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/50" style={{ animationDelay: '300ms' }} />
+          </div>
+        )}
+
         {!isUser && message.thinking && (
           <div className="mt-2 rounded-md border border-amber-200/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-400/40 dark:bg-amber-950/30 dark:text-amber-200">
             {message.thinking.status === 'analyzing'
@@ -101,6 +111,11 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </div>
         )}
 
+        {/* Artifact Panel - shown prominently after content, before status logs */}
+        {!isUser && (message.artifacts?.length || message.report) && (
+          <ArtifactPanel artifacts={message.artifacts} report={message.report} />
+        )}
+
         {!isUser && message.status && message.status.length > 0 && (
           <div className="mt-3 max-h-48 overflow-y-auto rounded-md border border-border/50 bg-muted/40 p-2 font-mono text-[12px] leading-5 text-muted-foreground">
             {message.status.map((line, idx) => (
@@ -109,10 +124,6 @@ export function ChatMessage({ message }: ChatMessageProps) {
               </div>
             ))}
           </div>
-        )}
-
-        {!isUser && (message.artifacts?.length || message.report) && (
-          <ArtifactPanel artifacts={message.artifacts} report={message.report} />
         )}
 
         {/* Action buttons for assistant messages */}

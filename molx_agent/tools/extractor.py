@@ -266,6 +266,8 @@ class ExtractFromSDFTool(BaseTool):
         from rdkit import Chem
 
         compounds = []
+        activity_cols = []
+        activity_keywords = ['activity', 'ic50', 'ic90', 'ec50', 'ki', 'kd', 'potency', 'inhibition']
         suppl = Chem.SDMolSupplier(file_path)
 
         for mol in suppl:
@@ -275,20 +277,37 @@ class ExtractFromSDFTool(BaseTool):
             smiles = Chem.MolToSmiles(mol)
             props = mol.GetPropsAsDict()
 
-            # Find activity property
-            activity = None
+            # Find all activity properties and build activities dict
+            activities = {}
+            primary_activity = None
+            
             for key in props:
                 key_lower = key.lower()
-                if any(kw in key_lower for kw in ['activity', 'ic50', 'ic90', 'ec50', 'ki']):
+                if any(kw in key_lower for kw in activity_keywords):
                     try:
-                        activity = float(props[key])
+                        val = props[key]
+                        # Handle string values like ">200"
+                        if isinstance(val, str):
+                            val_clean = val.replace('>', '').replace('<', '').strip()
+                            float_val = float(val_clean)
+                        else:
+                            float_val = float(val)
+                        
+                        activities[key] = float_val
+                        if primary_activity is None:
+                            primary_activity = float_val
+                        
+                        # Track activity columns
+                        if key not in activity_cols:
+                            activity_cols.append(key)
                     except (ValueError, TypeError):
-                        pass
-                    break
+                        # Keep original string if cannot parse
+                        activities[key] = props[key]
 
             compound = {
                 "smiles": smiles,
-                "activity": activity,
+                "activity": primary_activity,
+                "activities": activities,
                 "properties": props,
             }
 
@@ -304,4 +323,6 @@ class ExtractFromSDFTool(BaseTool):
             "source_file": file_path,
             "file_type": "sdf",
             "total_molecules": len(compounds),
+            "activity_columns": activity_cols,
         }
+

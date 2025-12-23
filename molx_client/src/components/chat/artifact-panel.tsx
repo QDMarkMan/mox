@@ -48,13 +48,64 @@ function DataPreview({ url, type, className, fullScreen }: DataPreviewProps) {
   if (!data) return null
 
   if (type === 'json') {
+    // Syntax highlighting for JSON
+    const highlightJson = (json: any): React.ReactNode => {
+      const jsonString = typeof json === 'string' ? json : JSON.stringify(json, null, 2)
+
+      // Split into lines and highlight each token
+      const highlightLine = (line: string): React.ReactNode => {
+        // Pattern to match JSON tokens
+        const parts: React.ReactNode[] = []
+        let remaining = line
+        let keyIndex = 0
+
+        // Match key-value patterns
+        const keyMatch = remaining.match(/^(\s*)("(?:[^"\\]|\\.)*")(\s*:\s*)/)
+        if (keyMatch) {
+          parts.push(<span key={`space-${keyIndex}`}>{keyMatch[1]}</span>)
+          parts.push(<span key={`key-${keyIndex}`} className="text-purple-600 dark:text-purple-400">{keyMatch[2]}</span>)
+          parts.push(<span key={`colon-${keyIndex}`}>{keyMatch[3]}</span>)
+          remaining = remaining.slice(keyMatch[0].length)
+          keyIndex++
+        }
+
+        // Highlight the value part
+        const valuePatterns = [
+          { pattern: /^"(?:[^"\\]|\\.)*"/, className: "text-green-600 dark:text-green-400" }, // strings
+          { pattern: /^-?\d+\.?\d*(?:[eE][+-]?\d+)?/, className: "text-blue-600 dark:text-blue-400" }, // numbers
+          { pattern: /^(true|false)/, className: "text-orange-600 dark:text-orange-400" }, // booleans
+          { pattern: /^null/, className: "text-red-500 dark:text-red-400" }, // null
+        ]
+
+        for (const { pattern, className } of valuePatterns) {
+          const match = remaining.match(pattern)
+          if (match) {
+            parts.push(<span key={`val-${keyIndex}`} className={className}>{match[0]}</span>)
+            remaining = remaining.slice(match[0].length)
+            break
+          }
+        }
+
+        // Add any remaining text (brackets, commas, etc.)
+        if (remaining) {
+          parts.push(<span key={`rest-${keyIndex}`} className="text-foreground/80">{remaining}</span>)
+        }
+
+        return parts.length > 0 ? parts : line
+      }
+
+      return jsonString.split('\n').map((line, i) => (
+        <div key={i}>{highlightLine(line)}</div>
+      ))
+    }
+
     return (
       <pre className={cn(
-        "p-4 text-xs font-mono overflow-auto bg-muted/30 rounded-md",
+        "p-4 text-xs font-mono overflow-auto bg-slate-50 dark:bg-slate-900/50 rounded-md",
         fullScreen ? "h-full" : "max-h-[32rem]",
         className
       )}>
-        {typeof data === 'string' ? data : JSON.stringify(data, null, 2)}
+        {highlightJson(data)}
       </pre>
     )
   }
@@ -68,18 +119,38 @@ function DataPreview({ url, type, className, fullScreen }: DataPreviewProps) {
       )}>
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="bg-muted/50 sticky top-0">
+            <tr className="bg-gradient-to-r from-primary/10 to-primary/5 sticky top-0">
               {data[0]?.map((header: string, i: number) => (
-                <th key={i} className="p-2 border-b border-border font-semibold whitespace-nowrap">{header}</th>
+                <th key={i} className="p-2 border-b border-border font-bold text-primary whitespace-nowrap">
+                  {header}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {data.slice(1).map((row: string[], i: number) => (
-              <tr key={i} className="hover:bg-muted/30 transition-colors">
-                {row.map((cell: string, j: number) => (
-                  <td key={j} className="p-2 border-b border-border/50 whitespace-nowrap">{cell}</td>
-                ))}
+              <tr
+                key={i}
+                className={cn(
+                  "hover:bg-primary/5 transition-colors",
+                  i % 2 === 0 ? "bg-background" : "bg-muted/20"
+                )}
+              >
+                {row.map((cell: string, j: number) => {
+                  // Highlight numeric values
+                  const isNumber = !isNaN(Number(cell)) && cell.trim() !== ''
+                  return (
+                    <td
+                      key={j}
+                      className={cn(
+                        "p-2 border-b border-border/50 whitespace-nowrap",
+                        isNumber && "text-blue-600 dark:text-blue-400 font-medium tabular-nums"
+                      )}
+                    >
+                      {cell}
+                    </td>
+                  )
+                })}
               </tr>
             ))}
           </tbody>

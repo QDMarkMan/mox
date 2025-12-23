@@ -406,17 +406,22 @@ class SARAgent(BaseAgent):
         activities = [c.get("activity") for c in compounds]
         ids = [c.get("compound_id", f"Cpd-{i}") for i, c in enumerate(compounds)]
         
+        # Build lookup dict by compound_id for efficient matching
+        # Use compound_id instead of SMILES since SMILES may differ after canonicalization
+        compound_lookup = {c.get("compound_id", f"Cpd-{i}"): c for i, c in enumerate(compounds)}
+        
         decomposed = decompose_r_groups(smiles, scaffold, activities, ids)
         if not decomposed:
             decomposed = simple_r_group_assignment(smiles, scaffold, activities, ids)
         
+        # Merge activity data from original compounds using compound_id matching
         for dec in decomposed:
-            for cpd in compounds:
-                if cpd.get("smiles") == dec.get("smiles"):
-                    dec["name"] = cpd.get("name") or cpd.get("Name") or dec.get("compound_id", "")
-                    if cpd.get("activities"):
-                        dec["activities"] = cpd["activities"]
-                    break
+            cpd_id = dec.get("compound_id")
+            cpd = compound_lookup.get(cpd_id)
+            if cpd:
+                dec["name"] = cpd.get("name") or cpd.get("Name") or cpd_id
+                if cpd.get("activities"):
+                    dec["activities"] = cpd["activities"]
         return decomposed
 
     def _analyze_variation_patterns(self, decomposed: list[dict]) -> dict:

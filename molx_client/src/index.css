@@ -116,9 +116,9 @@
 @layer utilities {
   .gradient-text {
     background: linear-gradient(90deg,
-        hsl(var(--primary)) 0%,
-        #a855f7 50%,
-        #ec4899 100%);
+        #B5FF00 0%,
+        #FDBC85 50%,
+        #B5FF00 100%);
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -220,11 +220,9 @@
   border-radius: 0.875rem;
   padding: 1px;
   background: linear-gradient(90deg,
-      #8b5cf6,
-      #ec4899,
-      #3b82f6,
-      #10b981,
-      #8b5cf6);
+      #B5FF00,
+      #FDBC85,
+      #B5FF00);
   background-size: 300% 100%;
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);

@@ -471,9 +471,12 @@ class ReporterAgent(BaseAgent):
                                 compounds.append({
                                     "smiles": smi,
                                     "activity": item.get("activity"),
+                                    "activities": item.get("activities", {}),  # Multi-activity support
                                     "compound_id": item.get("compound_id", ""),
+                                    "name": item.get("name") or item.get("Name"),
                                 })
                 except Exception as e:
                     logger.warning(f"Failed to load {json_path}: {e}")
 
         return compounds
+

@@ -18,18 +18,20 @@ export function WelcomePage({ onInputSubmit }: WelcomePageProps) {
 
       <div className="relative z-10 w-full max-w-4xl space-y-5 pt-8">
         {/* Welcome Header */}
-        <div className="space-y-4 text-center">
-          <div className="flex justify-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 p-2 backdrop-blur-sm ring-1 ring-white/20">
-              <img src={MoxLogo} alt="MolX Logo" className="h-full w-full object-contain" />
-            </div>
-          </div>
+        <div className="space-y-4">
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Welcome to Molx Agent
+            <h1 className="inline-flex items-center gap-2 text-2xl font-semibold tracking-tight text-foreground">
+              {/* <img src={MoxLogo} alt="MolX Logo" className="h-8 w-8 object-contain" /> */}
+              Welcome to{' '}
+              <span
+                className="bg-clip-text text-transparent bg-[length:200%_100%] animate-gradient"
+                style={{ backgroundImage: 'linear-gradient(90deg, #B5FF00, #FDBC85, #B5FF00)' }}
+              >
+                Molx Agent
+              </span>
             </h1>
             <p className="text-[15px] text-muted-foreground">
-              Your intelligent molecular data analysis assistant for drug discovery
+              Your intelligent assistant agent for drug discovery
             </p>
           </div>
         </div>

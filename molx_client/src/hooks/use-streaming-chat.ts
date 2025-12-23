@@ -322,6 +322,7 @@ export function useStreamingChat({
                 )
                 accumulatedContent = finalContent
                 setThinking(null)
+                setIsLoading(false) // Stop loading immediately on completion
                 break
 
               case 'artifacts':

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { ChatInput, type ChatInputFile } from './chat-input'
 import { WelcomePage } from './welcome-page'
-import { ChatMessage, ChatMessageLoading } from './chat-message'
+import { ChatMessage } from './chat-message'
 import { useStreamingChat } from '@/hooks/use-streaming-chat'
 
 interface ChatPanelProps {
@@ -76,11 +76,13 @@ export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: 
       return
     }
 
+    // Clear input immediately for better UX
+    setInput('')
+
     await sendMessage(value)
     if (sessionId && onSyncSessionPreview) {
       onSyncSessionPreview(sessionId, value)
     }
-    setInput('')
   }, [sessionId, onCreateSession, onSyncSessionPreview, sendMessage])
 
   const handleQuickAction = (actionId: string) => {
@@ -102,11 +104,19 @@ export function ChatPanel({ sessionId, onCreateSession, onSyncSessionPreview }: 
       {/* Messages Area - scrollable */}
       <div className="min-h-0 flex-1 overflow-y-auto p-4" ref={scrollRef}>
         <div className="mx-auto max-w-3xl space-y-4 pb-4">
-          {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
-          ))}
+          {messages.map((message, index) => {
+            // Show loading indicator on the last assistant message while streaming
+            const isLastMessage = index === messages.length - 1
+            const showLoading = isLoading && isLastMessage && message.role === 'assistant'
 
-          {isLoading && <ChatMessageLoading />}
+            return (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                isLoading={showLoading}
+              />
+            )
+          })}
 
           {/* Scroll anchor for auto-scroll */}
           <div ref={messagesEndRef} className="h-px w-full" />

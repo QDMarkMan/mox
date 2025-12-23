@@ -147,8 +147,8 @@ class PostgresStore(ConversationStore):
             await conn.execute(
                 self.INSERT_SQL,
                 uuid_id,
-                json.dumps(session.messages),
-                json.dumps(session.metadata_dict()),
+                json.dumps(session.messages, ensure_ascii=False, default=str),
+                json.dumps(session.metadata_dict(), ensure_ascii=False, default=str),
                 session.created_at,
                 session.last_activity,
             )
@@ -192,8 +192,8 @@ class PostgresStore(ConversationStore):
             result = await conn.execute(
                 self.UPDATE_SQL,
                 uuid_id,
-                json.dumps(session.messages),
-                json.dumps(session.metadata_dict()),
+                json.dumps(session.messages, ensure_ascii=False, default=str),
+                json.dumps(session.metadata_dict(), ensure_ascii=False, default=str),
                 session.last_activity,
             )
             
@@ -202,8 +202,8 @@ class PostgresStore(ConversationStore):
                 await conn.execute(
                     self.INSERT_SQL,
                     uuid_id,
-                    json.dumps(session.messages),
-                    json.dumps(session.metadata_dict()),
+                    json.dumps(session.messages, ensure_ascii=False, default=str),
+                    json.dumps(session.metadata_dict(), ensure_ascii=False, default=str),
                     session.created_at,
                     session.last_activity,
                 )
