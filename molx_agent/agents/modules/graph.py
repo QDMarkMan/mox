@@ -175,7 +175,19 @@ class SarGraphNodes:
                     report_path = task_result["report_path"]
                     break
 
-        summary = reflection.get("summary", "Analysis complete.")
+        # Generate intelligent AI-powered summary using planner
+        summary = None
+        if reflection.get("success"):
+            try:
+                summary = self.planner._generate_intelligent_summary(state)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Intelligent summary failed: {e}")
+        
+        # Fallback to reflection summary
+        if not summary:
+            summary = reflection.get("summary", "Analysis complete.")
+        
         response = f"✅ {summary}"
         if report_path:
             response += f"\n\n📊 Report generated: {report_path}"

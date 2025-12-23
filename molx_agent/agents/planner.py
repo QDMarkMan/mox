@@ -124,6 +124,36 @@ Return a JSON object with the same format as the original plan:
 }
 """
 
+INTELLIGENT_SUMMARY_PROMPT = """You are an intelligent task assistant. Generate a concise, professional summary based on the execution results.
+
+## User Request
+{user_query}
+
+## Executed Tasks
+{tasks_summary}
+
+## Task Results
+{results_summary}
+
+## Instructions
+Generate a professional yet accessible summary (2-4 sentences):
+1. Briefly describe what tasks were completed
+2. Mention key findings or outputs
+3. If reports or files were generated, briefly mention them
+
+Return only the summary text, no additional formatting or headers. Keep it concise and professional.
+"""
+
+# SAR-specific enhancement for summary
+SAR_SUMMARY_ENHANCEMENT = """
+## SAR Analysis Details
+- Total Compounds: {total_compounds}
+- Scaffold Strategy: {scaffold_strategy}
+- R-Group Positions: {r_positions}
+- Activity Cliffs: {activity_cliffs} pairs
+{additional_findings}
+"""
+
 
 @dataclass
 class PlanResult:
@@ -466,7 +496,8 @@ Create an improved plan that addresses these issues.
         )
 
         if all_done and report_generated and not has_errors:
-            summary = f"All {len(tasks)} tasks completed successfully. Report generated."
+            # Generate AI-powered intelligent summary
+            summary = self._generate_intelligent_summary(state)
             return ReflectionResult(True, summary, [], False)
 
         if has_errors:
@@ -474,14 +505,152 @@ Create an improved plan that addresses these issues.
                 tid for tid, res in results.items() if isinstance(res, dict) and "error" in res
             ]
             issues = [f"Error in {tid}: {results[tid].get('error', 'unknown')}" for tid in error_tasks]
-            summary = f"Tasks completed with errors in: {error_tasks}"
+            summary = f"Task execution error: {', '.join(error_tasks)}"
             return ReflectionResult(False, summary, issues, False)
 
         if all_done:
-            summary = f"All {len(tasks)} tasks completed."
+            summary = self._generate_intelligent_summary(state)
             return ReflectionResult(True, summary, [], False)
 
         return None
+
+    def _build_tasks_summary(self, tasks: dict) -> str:
+        """Build a summary of executed tasks."""
+        if not tasks:
+            return "No task information"
+        
+        task_lines = []
+        for tid, task in tasks.items():
+            task_type = task.get("type", "unknown")
+            description = task.get("description", "")[:80]
+            status = task.get("status", "unknown")
+            task_lines.append(f"- [{task_type}] {description} (status: {status})")
+        
+        return "\n".join(task_lines[:5])  # Limit to 5 tasks
+
+    def _build_results_summary(self, results: dict) -> tuple[str, dict]:
+        """Build a summary of task results and extract SAR-specific data if present.
+        
+        Returns:
+            Tuple of (results_summary_text, sar_data_dict_or_None)
+        """
+        result_lines = []
+        sar_data = None
+        
+        for task_id, result in results.items():
+            if not isinstance(result, dict):
+                continue
+            
+            if "error" in result:
+                result_lines.append(f"- {task_id}: Error - {result['error'][:50]}")
+                continue
+            
+            # Report generated
+            if result.get("report_path"):
+                result_lines.append(f"- Report generated: {result['report_path']}")
+            
+            # Data cleaning results
+            if "cleaned_count" in result:
+                result_lines.append(f"- Data cleaning: Processed {result['cleaned_count']} compounds")
+            
+            # SAR analysis - extract detailed data
+            if "decomposed_compounds" in result or "sar_analysis" in result:
+                sar_data = self._extract_sar_data(result)
+                result_lines.append(f"- SAR analysis: Completed scaffold decomposition and activity analysis")
+            
+            # Output files
+            if "output_files" in result:
+                files = result["output_files"]
+                if files:
+                    file_types = ", ".join(files.keys())
+                    result_lines.append(f"- Output files: {file_types}")
+        
+        return "\n".join(result_lines) if result_lines else "No result information", sar_data
+
+    def _extract_sar_data(self, result: dict) -> dict:
+        """Extract SAR-specific data for enhanced summary."""
+        sar_data = {
+            "total_compounds": 0,
+            "scaffold_strategy": "N/A",
+            "r_positions": "N/A",
+            "activity_cliffs": 0,
+            "additional_findings": "",
+        }
+        
+        additional = []
+        
+        # From SAR agent results
+        if "decomposed_compounds" in result:
+            decomposed = result.get("decomposed_compounds", [])
+            sar_data["total_compounds"] = len(decomposed)
+            sar_data["scaffold_strategy"] = result.get("scaffold_strategy", "N/A")
+            
+            if decomposed:
+                r_groups = decomposed[0].get("r_groups", {})
+                if r_groups:
+                    sar_data["r_positions"] = ", ".join(sorted(r_groups.keys()))
+            
+            ocat = result.get("ocat_pairs", [])
+            if ocat:
+                fold = ocat[0].get("fold_change")
+                if fold:
+                    additional.append(f"- Max activity change: {fold:.1f}x fold")
+        
+        # From reporter results
+        if "sar_analysis" in result:
+            sar = result["sar_analysis"]
+            sar_data["total_compounds"] = sar.get("total_compounds", sar_data["total_compounds"])
+            
+            cliffs = sar.get("activity_cliffs", {})
+            sar_data["activity_cliffs"] = cliffs.get("activity_cliffs_found", 0)
+            
+            fg = sar.get("functional_group_sar", {})
+            if fg.get("functional_group_sar"):
+                essential = [f["functional_group"] for f in fg["functional_group_sar"] if f.get("effect") == "essential"]
+                if essential:
+                    additional.append(f"- Essential functional groups: {', '.join(essential[:3])}")
+        
+        sar_data["additional_findings"] = "\n".join(additional) if additional else ""
+        return sar_data
+
+    def _generate_intelligent_summary(self, state: AgentState) -> str:
+        """Generate AI-powered intelligent summary of task execution."""
+        results = state.get("results", {})
+        tasks = state.get("tasks", {})
+        user_query = state.get("user_query", "")
+        
+        # Build task and result summaries
+        tasks_summary = self._build_tasks_summary(tasks)
+        results_summary, sar_data = self._build_results_summary(results)
+        
+        try:
+            # Build base prompt
+            prompt = INTELLIGENT_SUMMARY_PROMPT.format(
+                user_query=user_query[:300],
+                tasks_summary=tasks_summary,
+                results_summary=results_summary,
+            )
+            
+            # Add SAR enhancement if SAR data is present
+            if sar_data and sar_data.get("total_compounds", 0) > 0:
+                prompt += SAR_SUMMARY_ENHANCEMENT.format(**sar_data)
+            
+            # Call LLM for intelligent summary (parse_json=False for plain text)
+            summary = invoke_llm(
+                "You are an intelligent task assistant skilled at summarizing task execution results.",
+                prompt,
+                parse_json=False
+            )
+            
+            summary = summary.strip()
+            if summary:
+                return summary
+        except Exception as e:
+            logger.warning(f"LLM summary generation failed: {e}")
+        
+        # Fallback to simple summary
+        task_count = len(tasks)
+        return f"Completed execution of {task_count} tasks."
 
     def _apply_reflection(
         self, console, state: AgentState, reflection: ReflectionResult
