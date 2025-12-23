@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react' 
 import { apiUrl } from '@/lib/api'
 
 export interface ThinkingInfo {
@@ -72,11 +72,26 @@ export function useStreamingChat({
   const [isLoading, setIsLoading] = useState(false)
   const [thinking, setThinking] = useState<ThinkingInfo | null>(null)
   const [error, setError] = useState<Error | null>(null)
+  const lastSessionIdRef = useRef<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    if (!sessionId) {
+    const isSessionSwitch = lastSessionIdRef.current !== null && 
+                            sessionId !== null && 
+                            sessionId !== undefined &&
+                            lastSessionIdRef.current !== sessionId
+    const isGoingToNull = sessionId === null
+
+    if (isSessionSwitch || isGoingToNull) {
       setMessages([])
+      setThinking(null)
+      setError(null)
+      setIsLoading(false)
+    }
+    
+    lastSessionIdRef.current = sessionId ?? null
+
+    if (!sessionId) {
       return
     }
 
@@ -130,7 +145,17 @@ export function useStreamingChat({
           }
         }
 
-        setMessages(hydrated)
+        setMessages(prev => {
+          // If we already have messages (e.g. from a just-started sendMessage),
+          // merge history with them.
+          if (prev.length > 0) {
+            // Filter out any messages from prev that are already in hydrated (by content/role if ID is different)
+            // But usually, we just want to append the new ones.
+            const newMessages = prev.filter(m => !hydrated.some(h => h.role === m.role && h.content === m.content))
+            return [...hydrated, ...newMessages]
+          }
+          return hydrated
+        })
       } catch (historyError) {
         if ((historyError as Error).name !== 'AbortError') {
           console.warn('Failed to load session history', historyError)

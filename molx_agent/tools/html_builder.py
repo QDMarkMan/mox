@@ -50,7 +50,7 @@ body {
 }
 
 .container {
-    max-width: 1100px; /* Slightly narrower for better reading focus */
+    max-width: 1300px; /* Slightly narrower for better reading focus */
     margin: 0 auto;
     padding: 3rem 2rem;
 }
@@ -700,7 +700,21 @@ def build_rgroup_decomposition_table_section(
         # Add activity values for each column, or single activity
         if display_activity_cols:
             for col in display_activity_cols:
-                act_val = activities.get(col, activity) if activities else activity
+                # Try to get value from activities dict with fallback to main activity
+                act_val = None
+                if activities and isinstance(activities, dict):
+                    if col in activities:
+                        act_val = activities[col]
+                    else:
+                        # Fallback: try to find key ignoring whitespace
+                        found_key = next((k for k in activities if k.strip() == col.strip()), None)
+                        if found_key:
+                            act_val = activities[found_key]
+                        else:
+                            act_val = activity
+                else:
+                    act_val = activity
+                
                 act_str = f"{act_val}" if act_val is not None else "-"
                 html += f'<td class="activity-cell">{act_str}</td>'
         else:
@@ -737,6 +751,13 @@ def build_stats_section(sar_data: dict) -> str:
         
         for c in compounds:
             act = c.get("activity")
+            # Fallback to first activity from dict if main activity is missing
+            if act is None and c.get("activities"):
+                try:
+                    act = next(iter(c["activities"].values()))
+                except (StopIteration, AttributeError):
+                    pass
+            
             if act is not None:
                 try:
                     activities.append(float(act))
@@ -833,6 +854,13 @@ def build_compound_gallery_section(compounds: list[dict], max_display: int = 24)
         smiles = cpd.get("smiles", "")
         compound_id = cpd.get("compound_id", f"Cpd-{i+1}")
         activity = cpd.get("activity")
+        
+        # Fallback to first activity from dict if main activity is missing
+        if activity is None and cpd.get("activities"):
+            try:
+                activity = next(iter(cpd["activities"].values()))
+            except (StopIteration, AttributeError):
+                pass
         
         svg = _smiles_to_svg(smiles, width=200, height=150)
         
@@ -1304,6 +1332,16 @@ def build_sar_html_report(sar_data: dict, title: str = "SAR Analysis Report") ->
 
     # Multi-activity support: add activity selector if multiple columns available
     activity_columns = sar_data.get("activity_columns", [])
+    
+    # Infer activity columns if missing but activities dict exists in compounds
+    if not activity_columns and "compounds" in sar_data:
+        all_keys = set()
+        for c in sar_data["compounds"]:
+            if c.get("activities") and isinstance(c["activities"], dict):
+                all_keys.update(c["activities"].keys())
+        if all_keys:
+            activity_columns = sorted(list(all_keys))
+
     per_activity_results = sar_data.get("per_activity_results", {})
     
     # =========================================================================
