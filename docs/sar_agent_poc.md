@@ -51,7 +51,7 @@ LangGraph Graph
 
 ## 5. 现状评估
 ### ✅ 已完成
-- Agent 工作流已转向 LangGraph：`MolxAgent` 复用 `build_sar_graph`，Planner 支持 Think/Reflect/Optimize，多任务循环可迭代 3 次。
+- Agent 工作流已转向 LangGraph：`MolxAgent` 复用 `build_molx_graph`，Planner 支持 Think/Reflect/Optimize，多任务循环可迭代 3 次。
 - DataCleaner 现可自动解析内联 CSV、智能识别列名、保存多活动列并写入 artifacts 目录；Reporter 增加 single-site / subset 模式。
 - Memory/SessionManager 与 `molx_core` store 打通，TTL 清理、Session 恢复、Recorder 绑定已在 CLI/Server 生效。
 - Server 已提供同步/批量/SSE 路由，`stream_agent_response` 注入 thinking/status 事件，React UI 支持多 Session + 自动滚动体验。

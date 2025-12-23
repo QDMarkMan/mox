@@ -12,7 +12,7 @@
 
 ### Agents & Tools
 
-1. **LangGraph DAG 仍未真正实现**：`molx_agent/agents/molx.py:83-331` 里的 `build_sar_graph/get_sar_graph/run_sar_agent` 虽已集中在同一模块，但内部依然是手写的顺序流程与自定义状态机，没有利用 LangGraph 的异步/容错能力，导致导出名与实际能力不符。
+1. **LangGraph DAG 仍未真正实现**：`molx_agent/agents/molx.py:83-331` 里的 `build_molx_graph/get_molx_graph/run_sar_agent` 虽已集中在同一模块，但内部依然是手写的顺序流程与自定义状态机，没有利用 LangGraph 的异步/容错能力，导致导出名与实际能力不符。
 2. **数据清洗仅支持文件系统路径**：`molx_agent/agents/data_cleaner.py:103-144` 直接匹配字符串中的路径并用 `os.path.exists` 检查，无法处理通过 API 上传的文件内容或对象存储路径，也没有安全白名单，部署在服务器后几乎不可用。
 3. **输出目录硬编码**：`molx_agent/tools/standardize.py:20-116` 将所有清洗结果写入 `os.getcwd()/output`。这会在 CLI/Server/多租户环境下产生权限和冲突问题，也无法依据 session_id 隔离产物。
 4. **工具加载日志与实际不符**：`molx_agent/agents/modules/tools.py:18-75` 多处日志写死“Loaded ... (3)”但实际载入 5 个工具，同时缺少对工具失败的上报。虽然问题轻量，但会误导排障。

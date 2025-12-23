@@ -28,7 +28,7 @@ class ServerSettings(BaseSettings):
     # Server settings
     host: str = "0.0.0.0"
     port: int = 8000
-    debug: bool = False
+    debug: bool = True
     workers: int = 1
     reload: bool = False
 
@@ -55,12 +55,12 @@ class ServerSettings(BaseSettings):
 
     # Session settings
     session_ttl_seconds: int = 3600  # 1 hour
-    session_cleanup_interval: int = 300  # 5 minutes
+    session_cleanup_interval: int = 60 * 60  # 5 minutes
     max_sessions: int = 1000
 
     # Streaming settings
     stream_chunk_size: int = 1
-    stream_timeout: float = 180.0  # Increased for AI summary generation
+    stream_timeout: float = 360.0  # Increased for AI summary generation
 
 
 @lru_cache

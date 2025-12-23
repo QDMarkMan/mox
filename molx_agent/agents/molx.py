@@ -12,9 +12,9 @@ from molx_agent.agents.data_cleaner import DataCleanerAgent
 from molx_agent.agents.intent_classifier import IntentClassifierAgent
 from molx_agent.agents.modules.graph import (
     MAX_ITERATIONS,
-    build_sar_graph,
-    get_sar_graph,
-    reset_sar_graph,
+    build_molx_graph,
+    get_molx_graph,
+    reset_molx_graph,
 )
 from molx_agent.agents.modules.state import AgentState
 from molx_agent.agents.planner import PlannerAgent
@@ -48,7 +48,7 @@ class MolxAgent(BaseAgent):
             "reporter": ReporterAgent(),
         }
         self.max_iterations = max_iterations
-        self._graph = build_sar_graph(
+        self._graph = build_molx_graph(
             intent_classifier=self.intent_classifier,
             planner=self.planner,
             workers=self.workers,
@@ -76,7 +76,7 @@ class MolxAgent(BaseAgent):
 
 def run_sar_agent(user_query: str) -> AgentState:
     """Helper for CLI/server callers that don't need custom wiring."""
-    graph = get_sar_graph()
+    graph = get_molx_graph()
     initial_state: AgentState = {
         "user_query": user_query,
         "messages": [],

@@ -406,7 +406,7 @@ def route_after_worker(state: AgentState) -> str:
 # 4. 构建 LangGraph
 ###################################
 
-def build_sar_graph():
+def build_molx_graph():
     sg = StateGraph(AgentState)
 
     sg.add_node("planner", planner_node)
@@ -451,7 +451,7 @@ def build_sar_graph():
 # 5. 对外入口
 ###################################
 
-sar_graph = build_sar_graph()
+sar_graph = build_molx_graph()
 
 def run_sar_agent(user_query: str):
     initial_state: AgentState = {"user_query": user_query}

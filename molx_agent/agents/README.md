@@ -25,9 +25,9 @@
 
 1. **Classify**：`IntentClassifierAgent` 读取 `state['user_query']`，调用 LLM 输出 `Intent`、置信度及推理步骤。
 2. **Plan (THINK)**：`PlannerAgent` 使用 `PLANNER_SYSTEM_PROMPT` 生成任务 DAG，仅允许 `data_cleaner`、`sar`、`reporter` 三类 worker。任务保存在 `state['tasks']`，状态初始为 `pending`。
-3. **Act**：`SarGraphNodes.act` 根据依赖关系选取下一个 `pending` 任务，调用对应 worker (`DataCleanerAgent`/`SARAgent`/`ReporterAgent`，或自定义 worker)。运行结果写入 `state['results'][task_id]`。
+3. **Act**：`MolxGraphNodes.act` 根据依赖关系选取下一个 `pending` 任务，调用对应 worker (`DataCleanerAgent`/`SARAgent`/`ReporterAgent`，或自定义 worker)。运行结果写入 `state['results'][task_id]`。
 4. **Reflect / Optimize**：Planner 通过 `_derive_reflection_from_state` 或 LLM 评估产出，必要时触发 `OPTIMIZE_SYSTEM_PROMPT` 生成新计划，迭代不超过 `MAX_ITERATIONS`。
-5. **Finalize**：`SarGraphNodes.finalize` 负责拼接总结文本，附上报告路径，并写入 `state['final_response']` 与 `state['final_answer']`。
+5. **Finalize**：`MolxGraphNodes.finalize` 负责拼接总结文本，附上报告路径，并写入 `state['final_response']` 与 `state['final_answer']`。
 
 所有节点共享 `AgentState`（TypedDict），其中包含 `messages`、`tasks`、`results`、`reflection`、`intent_*` 等字段，确保 orchestrator 与 worker 间无缝传递信息。
 
@@ -56,7 +56,7 @@
 ## 共享基础模块
 
 - **`modules/state.py`**：集中维护 `AgentState`/`Task` 结构，LangGraph nodes 使用 `Annotated[list[BaseMessage], add_messages]` 追踪上下文。
-- **`modules/graph.py`**：构建 `StateGraph`，并在 LangGraph 未安装时提供本地降级实现；包含 `SarGraphNodes`，定义节点函数及路由逻辑。
+- **`modules/graph.py`**：构建 `StateGraph`，并在 LangGraph 未安装时提供本地降级实现；包含 `MolxGraphNodes`，定义节点函数及路由逻辑。
 - **`modules/llm.py`**：读取配置 (`get_settings`) 初始化本地或远端 OpenAI 兼容模型，附带 markdown JSON 清洗逻辑。
 - **`modules/tools.py`**：集中加载工具，按功能分组（RDKit、标准化、SAR、报告、MCP），并导出 `get_tool_names()` 供调试。
 - **`modules/mcp.py`**：`MCPToolLoader` 支持从文件/环境/配置对象中读取 server 列表，懒加载 `langchain-mcp-adapters`，暴露同步与异步 `get_mcp_tools` 接口。

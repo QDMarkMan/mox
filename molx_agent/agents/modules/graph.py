@@ -1,4 +1,11 @@
-"""Shared LangGraph helpers for Molx SAR orchestration."""
+"""
+**************************************************************************
+*  @Copyright [2025] Xtalpi Systems.
+*  @Author tongfu.e@xtalpi.com 
+*  @Date [2025-12-21 14:39:03].
+*  @Description LangGraph graph for Molx SAR orchestration.
+**************************************************************************
+"""
 
 from __future__ import annotations
 
@@ -85,12 +92,12 @@ except ImportError:  # pragma: no cover - fallback used in tests
 
     END = "__end__"
 
-MAX_ITERATIONS = 3
+MAX_ITERATIONS = 5
 _DEFAULT_GRAPH = None
 
 
 @dataclass
-class SarGraphNodes:
+class MolxGraphNodes:
     """Encapsulates all LangGraph node handlers and routing logic."""
 
     classifier: IntentClassifierAgent
@@ -236,7 +243,7 @@ class SarGraphNodes:
         return pick_fn(state)
 
 
-def build_sar_graph(
+def build_molx_graph(
     *,
     intent_classifier: Optional[IntentClassifierAgent] = None,
     planner: Optional[PlannerAgent] = None,
@@ -253,7 +260,7 @@ def build_sar_graph(
         "reporter": ReporterAgent(),
     }
 
-    nodes = SarGraphNodes(
+    nodes = MolxGraphNodes(
         classifier=classifier,
         planner=plan_agent,
         worker_map=worker_map,
@@ -291,15 +298,15 @@ def build_sar_graph(
     return graph.compile()
 
 
-def get_sar_graph():
+def get_molx_graph():
     """Return the shared SAR graph compiled with default components."""
     global _DEFAULT_GRAPH
     if _DEFAULT_GRAPH is None:
-        _DEFAULT_GRAPH = build_sar_graph()
+        _DEFAULT_GRAPH = build_molx_graph()
     return _DEFAULT_GRAPH
 
 
-def reset_sar_graph() -> None:
+def reset_molx_graph() -> None:
     """Clear the cached SAR graph."""
     global _DEFAULT_GRAPH
     _DEFAULT_GRAPH = None
@@ -307,8 +314,8 @@ def reset_sar_graph() -> None:
 
 __all__ = [
     "MAX_ITERATIONS",
-    "SarGraphNodes",
-    "build_sar_graph",
-    "get_sar_graph",
-    "reset_sar_graph",
+    "MolxGraphNodes",
+    "build_molx_graph",
+    "get_molx_graph",
+    "reset_molx_graph",
 ]

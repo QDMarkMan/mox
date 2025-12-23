@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from molx_agent.agents.intent_classifier import Intent
-from molx_agent.agents.molx import MolxAgent, reset_sar_graph
+from molx_agent.agents.molx import MolxAgent, reset_molx_graph
 from molx_agent.agents.modules.state import AgentState
 
 
@@ -64,9 +64,9 @@ class _StubWorker:
 
 @pytest.fixture(autouse=True)
 def _reset_graph():
-    reset_sar_graph()
+    reset_molx_graph()
     yield
-    reset_sar_graph()
+    reset_molx_graph()
 
 
 def test_molx_agent_handles_unsupported_intent():
