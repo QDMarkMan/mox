@@ -55,7 +55,7 @@ uv sync --extra dev
 Run the client using:
 
 ```bash
-uv run molx-agent --help
+uv run molx --help
 ```
 
 Or activate the virtual environment first:
@@ -65,7 +65,7 @@ source .venv/bin/activate  # Linux/macOS
 # or
 .venv\Scripts\activate     # Windows
 
-molx-agent --help
+molx --help
 ```
 
 ## Run the full-stack app

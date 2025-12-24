@@ -145,9 +145,11 @@
 1) 安装依赖：`uv sync --extra dev` 或 `make install && make pre-commit-install`
 2) 运行 SAR agent：
    ```bash
-   uv run molx-agent run --query "分析这些分子的 R1 SAR" --data ./data/example.csv
+   source .venv/bin/activate
+
+  mox chat
    ```
-   交互模式：`uv run molx-agent chat`（基于 `ChatSession`）
+   交互模式：`uv run molx chat`（基于 `ChatSession`）
 3) 验证：`make test`（触发 `pytest` 并更新覆盖率徽章）；只验 Agent 逻辑可用 `uv run pytest tests/agents -k sar`
 
 上述文档旨在帮助贡献者快速理解 Agent 模块的协作方式，对接新的工具链或扩展工作流时请同步更新本 README 与相关 `docs/` 条目。

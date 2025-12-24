@@ -8,7 +8,7 @@ Python sources live in `molx_agent`, with CLI entrypoints in `__main__.py`, reus
 
 - `uv sync --extra dev` — create the virtualenv and install app + dev tooling.
 - `make install && make pre-commit-install` — sync Poetry/conda workflows and register hooks for formatting and linting.
-- `uv run molx-agent --help` — smoke-test the CLI entrypoints locally.
+- `uv run molx --help` — smoke-test the CLI entrypoints locally.
 - `make formatting` / `make check-codestyle` — auto-format or lint with Ruff without touching files.
 - `make lint` — run style, safety, and test suites in the same pass (equivalent to `make check-codestyle && make test && make check-safety`).
 - `make test` — execute `pytest` with coverage, regenerating `assets/images/coverage.svg` for the badge.

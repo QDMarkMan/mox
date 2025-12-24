@@ -1,5 +1,5 @@
 # type: ignore[attr-defined]
-"""CLI entry point for molx-agent."""
+"""CLI entry point for molx."""
 
 import logging
 
@@ -12,8 +12,8 @@ from rich.prompt import Prompt
 from molx_agent import version
 
 app = typer.Typer(
-    name="molx-agent",
-    help="Drug design agent - SAR analysis powered by AI",
+    name="molx",
+    help="Drug design agent - Drug design Agent powered by AI",
     add_completion=False,
 )
 console = Console()
@@ -22,7 +22,7 @@ console = Console()
 def version_callback(print_version: bool) -> None:
     """Print the version of the package."""
     if print_version:
-        console.print(f"[yellow]molx-agent[/] version: [bold blue]{version}[/]")
+        console.print(f"[yellow]molx[/] version: [bold blue]{version}[/]")
         raise typer.Exit()
 
 
@@ -34,7 +34,7 @@ def main_callback(
         "--version",
         callback=version_callback,
         is_eager=True,
-        help="Print the version of molx-agent.",
+        help="Print the version of molx.",
     ),
 ) -> None:
     """Drug design agent - SAR analysis powered by AI."""
@@ -54,7 +54,7 @@ def sar(
     """Run SAR analysis agent.
 
     Example:
-        molx-agent sar "Analyze SAR of aspirin derivatives for COX-2 selectivity"
+        molx sar "Analyze SAR of aspirin derivatives for COX-2 selectivity"
     """
     if verbose:
         logging.basicConfig(level=logging.INFO)
@@ -105,7 +105,7 @@ def chat(
     Type your questions and get responses. Use 'exit', 'quit', or Ctrl+C to end.
 
     Example:
-        molx-agent chat
+        molx chat
     """
     if verbose:
         logging.basicConfig(level=logging.INFO)
@@ -164,15 +164,6 @@ def chat(
         raise typer.Exit(1)
 
 
-@app.command()
-def hello(
-    name: str = typer.Argument(..., help="Name to greet"),
-) -> None:
-    """Print a greeting (demo command)."""
-    from molx_agent.example import hello as hello_fn
-
-    console.print(f"[bold green]{hello_fn(name)}[/]")
-
-
 if __name__ == "__main__":
     app()
+

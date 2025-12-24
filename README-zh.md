@@ -55,7 +55,7 @@ uv sync --extra dev
 运行客户端：
 
 ```bash
-uv run molx-agent --help
+uv run molx --help
 ```
 
 或先激活虚拟环境：
@@ -65,7 +65,7 @@ source .venv/bin/activate  # Linux/macOS
 # 或
 .venv\Scripts\activate     # Windows
 
-molx-agent --help
+molx --help
 ```
 
 ## 运行全栈应用

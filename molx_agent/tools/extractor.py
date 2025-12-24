@@ -9,7 +9,9 @@
 
 import json
 import logging
+import os
 import re
+from pathlib import Path
 from typing import Any, Optional, Type
 
 from langchain_core.tools import BaseTool
@@ -21,6 +23,56 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+def _resolve_file_path(file_path: str) -> str:
+    """Resolve file path, supporting both absolute and relative paths.
+    
+    Args:
+        file_path: The input file path (absolute or relative).
+        
+    Returns:
+        Resolved absolute path.
+        
+    Raises:
+        FileNotFoundError: If the file cannot be found.
+    """
+    path = Path(file_path)
+    
+    # If already absolute and exists, return as-is
+    if path.is_absolute() and path.exists():
+        return str(path)
+    
+    # Try relative to current working directory
+    cwd_path = Path.cwd() / file_path.lstrip('/')
+    if cwd_path.exists():
+        logger.debug(f"Resolved path relative to cwd: {cwd_path}")
+        return str(cwd_path)
+    
+    # Try the path as-is (for relative paths like ./data/file.csv)
+    if path.exists():
+        return str(path.resolve())
+    
+    # Try stripping leading slash for paths like /tests/data/file.csv
+    if file_path.startswith('/'):
+        stripped_path = Path(file_path.lstrip('/'))
+        if stripped_path.exists():
+            logger.debug(f"Resolved stripped path: {stripped_path}")
+            return str(stripped_path.resolve())
+    
+    # Try common project-relative locations
+    project_root = Path.cwd()
+    for base in [project_root, project_root.parent]:
+        candidate = base / file_path.lstrip('/')
+        if candidate.exists():
+            logger.debug(f"Resolved project-relative path: {candidate}")
+            return str(candidate)
+    
+    # Nothing found
+    raise FileNotFoundError(
+        f"File not found: {file_path}\n"
+        f"Tried: {path}, {cwd_path}, {file_path.lstrip('/')}\n"
+        f"Current working directory: {Path.cwd()}"
+    )
 
 def identify_columns_with_llm(columns: list[str], llm: Any) -> dict:
     """Identify special columns using LLM.
@@ -231,8 +283,9 @@ class ExtractFromCSVTool(BaseTool):
 
     def _run(self, file_path: str) -> dict:
         import pandas as pd
-        df = pd.read_csv(file_path)
-        return _extract_from_dataframe(df, file_path, self.llm)
+        resolved_path = _resolve_file_path(file_path)
+        df = pd.read_csv(resolved_path)
+        return _extract_from_dataframe(df, resolved_path, self.llm)
 
 
 class ExtractFromExcelInput(BaseModel):
@@ -250,8 +303,9 @@ class ExtractFromExcelTool(BaseTool):
 
     def _run(self, file_path: str) -> dict:
         import pandas as pd
-        df = pd.read_excel(file_path)
-        return _extract_from_dataframe(df, file_path, self.llm)
+        resolved_path = _resolve_file_path(file_path)
+        df = pd.read_excel(resolved_path)
+        return _extract_from_dataframe(df, resolved_path, self.llm)
 
 
 class ExtractFromSDFInput(BaseModel):
@@ -264,11 +318,13 @@ class ExtractFromSDFTool(BaseTool):
 
     def _run(self, file_path: str) -> dict:
         from rdkit import Chem
+        
+        resolved_path = _resolve_file_path(file_path)
 
         compounds = []
         activity_cols = []
         activity_keywords = ['activity', 'ic50', 'ic90', 'ec50', 'ki', 'kd', 'potency', 'inhibition']
-        suppl = Chem.SDMolSupplier(file_path)
+        suppl = Chem.SDMolSupplier(resolved_path)
 
         for mol in suppl:
             if mol is None:
@@ -320,7 +376,7 @@ class ExtractFromSDFTool(BaseTool):
 
         return {
             "compounds": compounds,
-            "source_file": file_path,
+            "source_file": resolved_path,
             "file_type": "sdf",
             "total_molecules": len(compounds),
             "activity_columns": activity_cols,

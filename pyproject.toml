@@ -70,7 +70,7 @@ server = [
 ]
 
 [project.scripts]
-molx-agent = "molx_agent.__main__:app"
+molx = "molx_agent.__main__:app"
 molx-server = "molx_server.__main__:main"
 
 [project.urls]

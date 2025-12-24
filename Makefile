@@ -70,7 +70,7 @@ cleanup:
 	rm -rf build/
 
 serve:
-	make serve-api & make dev-client
+	make serve-api && make dev-client
 
 serve-api:
 	uv run molx-server run --verbose

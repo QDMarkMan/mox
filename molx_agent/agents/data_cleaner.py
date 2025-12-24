@@ -114,15 +114,125 @@ class DataCleanerAgent(BaseAgent):
         self.llm_with_tools = self.llm.bind_tools(self.tools)
 
     def _extract_file_path(self, text: str) -> Optional[str]:
-        """Extract file path from text."""
+        """Extract file path from text using LLM with regex fallback.
+        
+        Supports:
+        - Absolute Unix paths: /path/to/file.csv
+        - Absolute Windows paths: C:\\path\\to\\file.csv
+        - Relative paths: tests/data/file.csv, ./data/file.csv, ../data/file.csv
+        """
+        # Try LLM extraction first for better accuracy
+        llm_path = self._extract_file_path_with_llm(text)
+        if llm_path:
+            return llm_path
+        
+        # Fallback to regex patterns
+        file_extensions = r'\.(?:csv|xlsx|xls|sdf|mol2|pdb|sd)'
+        
         patterns = [
-            r'(/[^\s]+\.(?:csv|xlsx|xls|sdf|mol2|pdb|sd))',
-            r'([A-Za-z]:\\[^\s]+\.(?:csv|xlsx|xls|sdf|mol2|pdb|sd))',
+            # Relative paths with directory: tests/data/file.csv, ./data/file.csv
+            rf'((?:\./|\.\./)?[a-zA-Z0-9_\-]+(?:/[a-zA-Z0-9_\-\.]+)*{file_extensions})',
+            # Absolute Unix paths: /path/to/file.csv
+            rf'(/[^\s]+{file_extensions})',
+            # Absolute Windows paths: C:\path\to\file.csv
+            rf'([A-Za-z]:\\[^\s]+{file_extensions})',
+            # Simple filename: file.csv
+            rf'([a-zA-Z0-9_\-]+{file_extensions})',
         ]
+        
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return match.group(1)
+                path = match.group(1)
+                # Clean up any trailing punctuation
+                path = path.rstrip('.,;:')
+                return path
+        return None
+    
+    def _extract_file_path_with_llm(self, text: str) -> Optional[str]:
+        """Use LLM to extract file path from text.
+        
+        More reliable for complex or ambiguous paths.
+        """
+        if not text or len(text) < 5:
+            return None
+        
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+            
+            prompt = f"""Extract the file path from the following text. 
+Return ONLY the file path, nothing else. If no file path is found, return "NONE".
+
+Rules:
+1. Look for paths ending with .csv, .xlsx, .xls, .sdf, .mol2, .pdb
+2. Keep the path exactly as written (relative or absolute)
+3. Include ./ or ../ prefixes if present
+4. Do not modify or normalize the path
+
+Text: {text}
+
+File path:"""
+            
+            response = self.llm.invoke([
+                SystemMessage(content="You are a file path extractor. Output only the path or NONE."),
+                HumanMessage(content=prompt)
+            ])
+            
+            result = response.content.strip()
+            
+            # Validate result
+            if result and result.upper() != "NONE":
+                # Check if it looks like a valid path
+                valid_extensions = ('.csv', '.xlsx', '.xls', '.sdf', '.mol2', '.pdb', '.sd')
+                if any(result.lower().endswith(ext) for ext in valid_extensions):
+                    return result
+            
+            return None
+        except Exception as e:
+            logger.debug(f"LLM path extraction failed: {e}")
+            return None
+    
+    def _resolve_path(self, file_path: str) -> Optional[str]:
+        """Resolve file path, trying multiple strategies.
+        
+        Returns the resolved path if found, None otherwise.
+        """
+        from pathlib import Path
+        
+        if not file_path:
+            return None
+        
+        path = Path(file_path)
+        
+        # 1. If absolute and exists, return as-is
+        if path.is_absolute() and path.exists():
+            return str(path)
+        
+        # 2. Try relative to current working directory
+        cwd = Path.cwd()
+        
+        # Handle ./path or path directly
+        if file_path.startswith('./'):
+            candidate = cwd / file_path[2:]
+        elif file_path.startswith('/'):
+            # Treat /path as relative (strip leading /)
+            candidate = cwd / file_path[1:]
+        else:
+            candidate = cwd / file_path
+        
+        if candidate.exists():
+            return str(candidate)
+        
+        # 3. Try the path as-is
+        if path.exists():
+            return str(path.resolve())
+        
+        # 4. Try parent directories
+        for parent in [cwd.parent, cwd.parent.parent]:
+            candidate = parent / file_path.lstrip('./')
+            if candidate.exists():
+                return str(candidate)
+        
         return None
 
     def _extract_inline_csv(self, text: str) -> Optional[str]:
@@ -404,25 +514,26 @@ Return JSON:
                 file_path = uploaded_path
                 console.print(f"   [dim]Using uploaded file: {uploaded_path}[/]")
         
-        # Check if we have a valid file path
+        # Check if we have a valid file path - resolve it first
         extracted_data = None
         data_source = None
+        resolved_path = self._resolve_path(file_path) if file_path else None
         
-        if file_path and os.path.exists(file_path):
+        if resolved_path:
             # Source 1: File-based extraction
-            console.print(f"   [dim]File: {file_path}[/]")
+            console.print(f"   [dim]File: {resolved_path}[/]")
             data_source = "file"
             
             try:
-                extractor = self._get_extractor_for_file(file_path)
+                extractor = self._get_extractor_for_file(resolved_path)
                 if not extractor:
                     if "results" not in state:
                         state["results"] = {}
-                    state["results"][tid] = {"error": f"Unsupported file type: {file_path}"}
+                    state["results"][tid] = {"error": f"Unsupported file type: {resolved_path}"}
                     return state
                 
                 console.print(f"   [dim]Using extractor: {extractor.name}[/]")
-                extracted_data = extractor.invoke(file_path)
+                extracted_data = extractor.invoke(resolved_path)
             except Exception as e:
                 console.print(f"[red]✗ File extraction error: {e}[/]")
                 logger.error(f"File extraction error: {e}")

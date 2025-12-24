@@ -12,7 +12,7 @@
 CLI / React UI ─┬─> FastAPI (molx_server)
                 │       ├─ SessionManager / molx_core.memory
                 │       └─ LangGraph orchestration
-                └─> Direct CLI (uv run molx-agent)
+                └─> Direct CLI (uv run molx)
 
 LangGraph Graph
   ├─ IntentClassifier (LLM)
@@ -31,8 +31,8 @@ LangGraph Graph
 ## 3. 关键能力
 | 能力 | 描述 | 入口 |
 | --- | --- | --- |
-| SAR 分析 CLI | `uv run molx-agent sar "Analyze ..."` 输出 Markdown 报告 | CLI |
-| 交互式 Chat | `uv run molx-agent chat`，支持历史、清空、打印 JSON | CLI |
+| SAR 分析 CLI | `uv run molx sar "Analyze ..."` 输出 Markdown 报告 | CLI |
+| 交互式 Chat | `uv run molx chat`，支持历史、清空、打印 JSON | CLI |
 | FastAPI API | `/api/v1/agent/invoke`（同步）、`/api/v1/agent/stream`（SSE）、`/api/v1/agent/batch` | Server |
 | 专用 SAR API | `/api/v1/sar/analyze`、`/api/v1/sar/stream` | Server |
 | React Web UI | `molx_client` Vite + Tailwind，调用 `/api/v1/agent/stream`，支持多 Session 列表（本地） | Client |
@@ -45,7 +45,7 @@ LangGraph Graph
 3. 另起终端 `cd molx_client && pnpm install && pnpm dev`，在 `.env` 中配置 `VITE_API_BASE=http://localhost:8000/api/v1` 以体验 UI。
 4. CLI 演示：
    ```bash
-   uv run molx-agent sar "Analyze SAR of celecoxib analogs for COX-2 selectivity"
+   uv run molx sar "Analyze SAR of celecoxib analogs for COX-2 selectivity"
    ```
    观察 DataCleaner -> SARAgent -> Reporter 的控制台输出以及 `artifacts/tools/data_cleaner/cleaned_*.{json,csv}`。
 
