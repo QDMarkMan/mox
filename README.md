@@ -91,6 +91,49 @@ client in `molx_client/`. To exercise the complete flow:
 
 ## Architecture & Docs
 
+### Project Folder
+
+Core layout (top-level):
+```text
+.
+├── molx_agent/    # Python agents, tools, CLI entry
+├── molx_core/     # Shared memory/state logic
+├── molx_server/   # FastAPI backend (chat/session APIs)
+├── molx_client/   # React + Vite web UI
+├── config/        # Defaults (e.g., MCP servers)
+├── docs/          # Design notes & POC reports
+├── examples/      # Usage samples & scripts
+├── tests/         # Pytest suites mirroring sources
+├── docker/        # Dockerfiles & build helpers
+├── assets/        # Images/badges
+└── output/        # Generated artifacts (reports, data)
+```
+
+Key internals:
+```text
+molx_agent/
+├── __main__.py     # CLI entrypoint
+├── config.py       # Agent defaults
+├── agents/         # Planner/SAR/report agents & bases
+├── tools/          # Chemistry/report utilities & prompts
+├── middleware/     # PPI middleware
+├── utils/          # Shared helpers (paths, etc.)
+└── memory/         # Agent memory abstractions
+molx_core/
+├── config.py
+└── memory/         # Cross-runtime memory/state helpers
+molx_server/
+├── app.py          # FastAPI app factory
+├── routes/         # API endpoints
+├── middleware/     # Server middleware
+└── schemas/        # Pydantic request/response models
+molx_client/
+├── src/            # React + Vite UI
+└── vite.config.ts
+```
+
+### Docs
+
 - [POC Report](docs/sar_agent_poc.md): Current capabilities, demo flow, and next steps.
 - [review.md](review.md): Known issues and risks for Agent/Mem/Server/Client.
 - [todo.md](todo.md): TODOs for Agent/Mem/Server/Client.

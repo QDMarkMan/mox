@@ -254,9 +254,21 @@ class DataCleanerAgent(BaseAgent):
         if compounds and self.save_data_tool:
             try:
                 console.print(f"   [dim]Saving {len(compounds)} compounds to files...[/]")
+                
+                # Generate meaningful task name from description
+                task_desc = task.get("description", "")
+                if task_desc:
+                    # Extract key words from description, e.g., "Extract and clean molecular data" -> "extract_clean_molecular_data"
+                    import re
+                    # Take first few words, clean special chars
+                    words = re.findall(r'\w+', task_desc.lower())[:4]
+                    task_name = "_".join(words) if words else tid
+                else:
+                    task_name = tid
+                
                 save_result = self.save_data_tool.invoke({
                     "data": extracted_data,
-                    "task_id": tid,
+                    "task_id": task_name,
                 })
                 if isinstance(save_result, str):
                     save_result = json.loads(save_result)
