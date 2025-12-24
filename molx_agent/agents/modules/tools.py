@@ -290,6 +290,8 @@ def _load_extractor_tools(registry: ToolRegistry) -> None:
             ExtractFromCSVTool,
             ExtractFromExcelTool,
             ExtractFromSDFTool,
+            ResolveFilePathTool,
+            ParseInlineCSVTool,
         )
 
         registry.register(
@@ -309,7 +311,18 @@ def _load_extractor_tools(registry: ToolRegistry) -> None:
             ToolCategory.EXTRACTOR,
             allowed_agents=["data_cleaner"],
         )
-        logger.info("Loaded extractor tools (3)")
+        registry.register(
+            ResolveFilePathTool(), 
+            ToolCategory.EXTRACTOR,
+            allowed_agents=["data_cleaner"],
+        )
+        registry.register(
+            ParseInlineCSVTool(), 
+            ToolCategory.EXTRACTOR,
+            requires_llm=True,
+            allowed_agents=["data_cleaner"],
+        )
+        logger.info("Loaded extractor tools (5)")
     except ImportError as e:
         logger.warning(f"Could not import extractor tools: {e}")
 

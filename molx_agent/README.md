@@ -70,7 +70,7 @@
 - 内部 `_pick_next_task` 负责拓扑调度，仅当依赖任务均 `done` 时才返回可执行任务。
 
 ### 数据/分析/报告 Worker
-- **DataCleanerAgent**：读取任务描述/输入自适应选择提取工具 (`ExtractFromCSV/Excel/SDF`)，随后串行调用 `CleanCompoundDataTool` 与 `SaveCleanedDataTool`，并在结果中保留 `activity_columns` 方便 Reporter。
+- **DataCleanerAgent**：基于 LLM 驱动的 ReAct 模式，使用 `create_react_agent` 自动选择工具。支持的工具包括：`resolve_file_path`（路径解析）、`parse_inline_csv`（内联 CSV 解析）、`extract_from_csv/excel/sdf`（文件提取）、`clean_compound_data`（数据清洗）、`save_cleaned_data`（保存）。LLM 根据 `DATA_CLEANER_PROMPT` 决定调用顺序。
 - **SARAgent**：封装规则与工具组合，选择 scaffold (`find_mcs_scaffold`/`find_common_murcko_scaffold`)，执行 R-group decomposition、OCAT pairing (`identify_ocat_series`)，并可生成单点扫描洞察。支持外部注入规则或 prompt，所有分析 metadata 写入结果字典中。
 - **ReporterAgent**：根据 Planner 传入的 `report_intent` 或从用户查询提取关键字，决定运行 Full/SINGLE_SITE/Molecule subset 分析。聚合 `run_full_sar_analysis`、`generate_html_report`、`build_report_summary`（及分析类工具）输出报告与摘要。
 - **ToolAgent**（可选）：基于 `create_react_agent` 自动处理工具调用任务，适合单次问答型任务或调试工具链。

@@ -137,18 +137,19 @@ def _calculate_activity_stats(activities: list) -> dict:
     }
 
 
-def _extract_from_dataframe(df, file_path: str, llm: Any = None) -> dict:
+def _extract_from_dataframe(df, file_path: str, llm: Any = None, use_llm_for_columns: bool = False) -> dict:
     """Extract molecular data from pandas DataFrame.
 
     Args:
         df: Pandas DataFrame.
         file_path: Source file path.
         llm: Optional LLM for intelligent column identification.
+        use_llm_for_columns: Whether to use LLM for column detection (default: False for speed).
 
     Returns:
         Extracted data dictionary.
     """
-    # Default strategies
+    # Default strategies - keyword based (fast)
     smiles_keywords = ['smiles', 'smi', 'structure', 'canonical_smiles', 'mol']
     activity_keywords = ['ic50', 'ic90', 'ec50', 'ki', 'kd', 'activity', 'potency']
     id_keywords = ['compound', 'id', 'name', 'number', 'cpd', 'mol_id']
@@ -157,9 +158,10 @@ def _extract_from_dataframe(df, file_path: str, llm: Any = None) -> dict:
     id_col = None
     activity_cols = []
 
-    # 1. Try LLM if available
-    if llm:
+    # 1. Try LLM only if explicitly enabled and available
+    if use_llm_for_columns and llm:
         try:
+            logger.info("Using LLM for column identification...")
             llm_result = identify_columns_with_llm(list(df.columns), llm)
             if llm_result.get("smiles_col"):
                 smiles_col = llm_result["smiles_col"]
@@ -168,9 +170,9 @@ def _extract_from_dataframe(df, file_path: str, llm: Any = None) -> dict:
             if llm_result.get("activity_cols"):
                 activity_cols = llm_result["activity_cols"]
         except Exception as e:
-            logger.warning(f"LLM identification failed, falling back to keywords: {e}")
+            logger.warning(f"LLM identification failed, using keywords: {e}")
 
-    # 2. Fallback to keywords if not found
+    # 2. Fallback to keywords (always used if LLM didn't find columns)
     if not smiles_col:
         for col in df.columns:
             if any(kw in col.lower() for kw in smiles_keywords):
@@ -382,3 +384,133 @@ class ExtractFromSDFTool(BaseTool):
             "activity_columns": activity_cols,
         }
 
+
+# =============================================================================
+# File Path Resolution Tool
+# =============================================================================
+
+class ResolveFilePathInput(BaseModel):
+    file_path: str = Field(description="The file path to resolve (can be relative or absolute)")
+
+class ResolveFilePathTool(BaseTool):
+    """Tool to resolve and validate file paths.
+    
+    Supports:
+    - Absolute paths: /path/to/file.csv
+    - Relative paths: ./data/file.csv, ../data/file.csv
+    - Project-relative paths: tests/data/file.csv
+    """
+    name: str = "resolve_file_path"
+    description: str = (
+        "Resolve and validate a file path. "
+        "Use this to convert relative paths to absolute paths and verify the file exists. "
+        "Returns the resolved absolute path or an error message."
+    )
+    args_schema: Type[BaseModel] = ResolveFilePathInput
+
+    def _run(self, file_path: str) -> str:
+        """Resolve file path and return result as JSON string."""
+        try:
+            resolved = _resolve_file_path(file_path)
+            return json.dumps({
+                "success": True,
+                "resolved_path": resolved,
+                "original_path": file_path,
+            })
+        except FileNotFoundError as e:
+            return json.dumps({
+                "success": False,
+                "error": str(e),
+                "original_path": file_path,
+            })
+
+
+# =============================================================================
+# Inline CSV Parsing Tool
+# =============================================================================
+
+class ParseInlineCSVInput(BaseModel):
+    csv_text: str = Field(description="The CSV data as text (including headers)")
+
+class ParseInlineCSVTool(BaseTool):
+    """Parse CSV data directly from text input.
+    
+    Useful for:
+    - CSV data pasted in code blocks: ```csv ... ```
+    - Raw CSV data in user messages
+    """
+    name: str = "parse_inline_csv"
+    description: str = (
+        "Parse inline CSV data from text. "
+        "Use this when the user provides CSV data directly in their message "
+        "instead of a file path. Returns extracted molecular data."
+    )
+    args_schema: Type[BaseModel] = ParseInlineCSVInput
+    llm: Optional[Any] = None
+
+    def __init__(self, llm: Optional[Any] = None):
+        super().__init__()
+        self.llm = llm
+
+    def _run(self, csv_text: str) -> dict:
+        """Parse CSV text and extract molecular data."""
+        import pandas as pd
+        import io
+        
+        try:
+            # Clean up the CSV text
+            csv_text = csv_text.strip()
+            
+            # Remove code block markers if present
+            if csv_text.startswith("```csv"):
+                csv_text = csv_text[6:]
+            elif csv_text.startswith("```"):
+                csv_text = csv_text[3:]
+            if csv_text.endswith("```"):
+                csv_text = csv_text[:-3]
+            csv_text = csv_text.strip()
+            
+            # Parse to DataFrame
+            df = pd.read_csv(io.StringIO(csv_text))
+            
+            if df.empty:
+                return {
+                    "success": False,
+                    "error": "Empty CSV data",
+                    "compounds": [],
+                }
+            
+            # Extract data using common helper
+            result = _extract_from_dataframe(df, "inline_csv", self.llm)
+            result["success"] = True
+            result["source"] = "inline_csv"
+            return result
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "compounds": [],
+            }
+
+
+# =============================================================================
+# Exports
+# =============================================================================
+
+def get_extractor_tools(llm: Optional[Any] = None) -> list:
+    """Get all extractor tools.
+    
+    Args:
+        llm: Optional LLM for column identification.
+        
+    Returns:
+        List of extractor tool instances.
+    """
+    return [
+        ExtractFromCSVTool(llm=llm),
+        ExtractFromExcelTool(llm=llm),
+        ExtractFromSDFTool(),
+        ResolveFilePathTool(),
+        ParseInlineCSVTool(llm=llm),
+    ]

@@ -3,23 +3,16 @@
 *  @Copyright [2025] Xtalpi Systems.
 *  @Author tongfu.e@xtalpi.com
 *  @Date [2025-12-17].
-*  @Description DataCleanerAgent - AI-driven molecular data extraction.
-*               Focuses on decision-making for standardized data extraction.
+*  @Description DataCleanerAgent - LLM-assisted molecular data extraction.
+*               Uses LLM for smart decisions but with deterministic workflow.
 **************************************************************************
 """
 
-import io
-import json
 import logging
-import os
-import re
+import json
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-
 from langchain_core.messages import SystemMessage, HumanMessage
-from langgraph.graph import END, StateGraph, START
-from langgraph.prebuilt import ToolNode, tools_condition
 from rich.console import Console
 
 from molx_agent.agents.base import BaseAgent
@@ -32,582 +25,263 @@ console = Console()
 
 
 # =============================================================================
-# System Prompt for AI-driven data extraction
+# System Prompt for data source detection
 # =============================================================================
 
-DATA_CLEANER_PROMPT = """You are a molecular data extraction and standardization assistant.
+DATA_SOURCE_PROMPT = """Analyze the user input and identify the data source.
 
-Your task is to extract, clean and standardize molecular data from files or inline data.
+Return a JSON object with:
+{
+  "source_type": "file" | "inline_csv" | "unknown",
+  "file_path": "path if source_type is file, else null",
+  "file_type": "csv" | "excel" | "sdf" | null,
+  "csv_content": "CSV content if inline, else null"
+}
 
-## Available Tools:
-
-### Extraction Tools:
-1. `extract_from_csv` - Extract data from CSV files
-2. `extract_from_excel` - Extract data from Excel files (.xlsx, .xls)
-3. `extract_from_sdf` - Extract data from SDF/MOL files
-
-### Standardization Tools:
-4. `clean_compound_data` - Clean and validate compound data (canonicalize SMILES, filter invalid)
-5. `save_cleaned_data` - Save cleaned data to JSON/CSV files
-
-## Data Sources:
-1. **File Path**: Extract data from local files (.csv, .xlsx, .xls, .sdf, .mol)
-2. **Inline CSV Data**: Parse CSV data directly from user input text
-
-## Workflow:
-1. Analyze the input to determine data source (file path or inline CSV)
-2. If file path: Call the appropriate EXTRACTION tool
-3. If inline CSV: Parse the CSV data directly from input
-4. Call `clean_compound_data` to standardize the extracted data
-5. Call `save_cleaned_data` to persist the results
-
-## File Type Detection:
-- `.csv` → use extract_from_csv
-- `.xlsx`, `.xls` → use extract_from_excel  
-- `.sdf`, `.mol`, `.sd` → use extract_from_sdf
-
-Always extract first, then clean, then save.
-"""
+Rules:
+1. Look for file paths ending with .csv, .xlsx, .xls, .sdf, .mol
+2. Keep relative paths as-is (e.g., ./tests/data/file.csv)
+3. If CSV data is in code blocks or raw format, extract it
+4. Return only the JSON, no explanation"""
 
 
 class DataCleanerAgent(BaseAgent):
-    """AI-driven molecular data extraction and standardization agent.
+    """LLM-assisted molecular data extraction and standardization agent.
     
-    Focuses on decision-making: which extractor to use, how to clean data.
-    Uses tools from extractor.py and standardize.py.
+    Uses a hybrid approach:
+    - LLM for smart data source detection
+    - Deterministic workflow for tool execution
+    
+    This avoids ReAct loops while still using AI for intelligence.
     """
 
     def __init__(self) -> None:
         super().__init__(
             name="data_cleaner",
-            description="Extracts and standardizes molecular data using AI decision-making",
+            description="Extracts and standardizes molecular data using AI-assisted decisions",
         )
         
         # Initialize LLM
         self.llm = get_llm()
         
-        # Get specific tools from registry by name
-        # (not by category, to avoid getting unrelated tools like StandardizeMolecule)
+        # Get tools from registry
         registry = get_registry()
-        
-        # Inject LLM into tools that require it
         registry.inject_llm(self.llm)
         
-        # Get specific extractor tools
-        self.extractor_tools = [
-            registry.get_tool_by_name("extract_from_csv"),
-            registry.get_tool_by_name("extract_from_excel"),
-            registry.get_tool_by_name("extract_from_sdf"),
-        ]
-        self.extractor_tools = [t for t in self.extractor_tools if t is not None]
+        # Get specific tools by name
+        self.resolve_path_tool = registry.get_tool_by_name("resolve_file_path")
+        self.extract_csv_tool = registry.get_tool_by_name("extract_from_csv")
+        self.extract_excel_tool = registry.get_tool_by_name("extract_from_excel")
+        self.extract_sdf_tool = registry.get_tool_by_name("extract_from_sdf")
+        self.parse_inline_csv_tool = registry.get_tool_by_name("parse_inline_csv")
+        self.clean_data_tool = registry.get_tool_by_name("clean_compound_data")
+        self.save_data_tool = registry.get_tool_by_name("save_cleaned_data")
         
-        # Get specific standardize tools for data cleaning
-        self.standardize_tools = [
-            registry.get_tool_by_name("clean_compound_data"),
-            registry.get_tool_by_name("save_cleaned_data"),
-        ]
-        self.standardize_tools = [t for t in self.standardize_tools if t is not None]
-        
-        self.tools = self.extractor_tools + self.standardize_tools
-        
-        # Bind tools to LLM
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
+        logger.info("DataCleanerAgent initialized with LLM-assisted workflow")
 
-    def _extract_file_path(self, text: str) -> Optional[str]:
-        """Extract file path from text using LLM with regex fallback.
+    def _detect_data_source(self, text: str) -> Dict[str, Any]:
+        """Detect data source from text using fast regex (LLM as backup).
         
-        Supports:
-        - Absolute Unix paths: /path/to/file.csv
-        - Absolute Windows paths: C:\\path\\to\\file.csv
-        - Relative paths: tests/data/file.csv, ./data/file.csv, ../data/file.csv
+        Returns dict with source_type, file_path, file_type, csv_content.
         """
-        # Try LLM extraction first for better accuracy
-        llm_path = self._extract_file_path_with_llm(text)
-        if llm_path:
-            return llm_path
+        # Try fast regex first
+        result = self._fallback_detect_source(text)
         
-        # Fallback to regex patterns
-        file_extensions = r'\.(?:csv|xlsx|xls|sdf|mol2|pdb|sd)'
+        if result["source_type"] != "unknown":
+            logger.debug(f"Regex detected source: {result}")
+            return result
         
-        patterns = [
-            # Relative paths with directory: tests/data/file.csv, ./data/file.csv
-            rf'((?:\./|\.\./)?[a-zA-Z0-9_\-]+(?:/[a-zA-Z0-9_\-\.]+)*{file_extensions})',
-            # Absolute Unix paths: /path/to/file.csv
-            rf'(/[^\s]+{file_extensions})',
-            # Absolute Windows paths: C:\path\to\file.csv
-            rf'([A-Za-z]:\\[^\s]+{file_extensions})',
-            # Simple filename: file.csv
-            rf'([a-zA-Z0-9_\-]+{file_extensions})',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                path = match.group(1)
-                # Clean up any trailing punctuation
-                path = path.rstrip('.,;:')
-                return path
-        return None
-    
-    def _extract_file_path_with_llm(self, text: str) -> Optional[str]:
-        """Use LLM to extract file path from text.
-        
-        More reliable for complex or ambiguous paths.
-        """
-        if not text or len(text) < 5:
-            return None
-        
+        # Only use LLM if regex failed
         try:
-            from langchain_core.messages import HumanMessage, SystemMessage
-            
-            prompt = f"""Extract the file path from the following text. 
-Return ONLY the file path, nothing else. If no file path is found, return "NONE".
-
-Rules:
-1. Look for paths ending with .csv, .xlsx, .xls, .sdf, .mol2, .pdb
-2. Keep the path exactly as written (relative or absolute)
-3. Include ./ or ../ prefixes if present
-4. Do not modify or normalize the path
-
-Text: {text}
-
-File path:"""
-            
             response = self.llm.invoke([
-                SystemMessage(content="You are a file path extractor. Output only the path or NONE."),
-                HumanMessage(content=prompt)
+                SystemMessage(content=DATA_SOURCE_PROMPT),
+                HumanMessage(content=f"Input:\n{text}")
             ])
             
-            result = response.content.strip()
+            content = response.content.strip()
             
-            # Validate result
-            if result and result.upper() != "NONE":
-                # Check if it looks like a valid path
-                valid_extensions = ('.csv', '.xlsx', '.xls', '.sdf', '.mol2', '.pdb', '.sd')
-                if any(result.lower().endswith(ext) for ext in valid_extensions):
-                    return result
+            # Clean markdown code blocks
+            if content.startswith("```json"):
+                content = content[7:]
+            elif content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
             
-            return None
+            result = json.loads(content.strip())
+            logger.debug(f"LLM detected source: {result}")
+            return result
+            
         except Exception as e:
-            logger.debug(f"LLM path extraction failed: {e}")
-            return None
+            logger.warning(f"LLM source detection failed: {e}")
+            return {"source_type": "unknown", "file_path": None, "file_type": None, "csv_content": None}
     
-    def _resolve_path(self, file_path: str) -> Optional[str]:
-        """Resolve file path, trying multiple strategies.
+    def _fallback_detect_source(self, text: str) -> Dict[str, Any]:
+        """Fallback regex-based source detection."""
+        import re
         
-        Returns the resolved path if found, None otherwise.
-        """
-        from pathlib import Path
-        
-        if not file_path:
-            return None
-        
-        path = Path(file_path)
-        
-        # 1. If absolute and exists, return as-is
-        if path.is_absolute() and path.exists():
-            return str(path)
-        
-        # 2. Try relative to current working directory
-        cwd = Path.cwd()
-        
-        # Handle ./path or path directly
-        if file_path.startswith('./'):
-            candidate = cwd / file_path[2:]
-        elif file_path.startswith('/'):
-            # Treat /path as relative (strip leading /)
-            candidate = cwd / file_path[1:]
-        else:
-            candidate = cwd / file_path
-        
-        if candidate.exists():
-            return str(candidate)
-        
-        # 3. Try the path as-is
-        if path.exists():
-            return str(path.resolve())
-        
-        # 4. Try parent directories
-        for parent in [cwd.parent, cwd.parent.parent]:
-            candidate = parent / file_path.lstrip('./')
-            if candidate.exists():
-                return str(candidate)
-        
-        return None
-
-    def _extract_inline_csv(self, text: str) -> Optional[str]:
-        """Extract inline CSV data from user input text.
-        
-        Supports formats like:
-        - CSV data in code blocks: ```csv ... ``` or ``` ... ```
-        - Raw CSV data with headers containing common column names (smiles, compound, IC50, etc.)
-        
-        Args:
-            text: User input text potentially containing CSV data.
-            
-        Returns:
-            Extracted CSV string or None if not found.
-        """
-        # Pattern 1: CSV in code blocks (```csv ... ``` or ``` ... ```)
-        code_block_pattern = r'```(?:csv)?\s*\n([\s\S]+?)\n```'
-        match = re.search(code_block_pattern, text, re.IGNORECASE)
-        if match:
-            csv_content = match.group(1).strip()
-            # Verify it looks like CSV (has commas and newlines)
-            if ',' in csv_content and '\n' in csv_content:
-                return csv_content
-        
-        # Pattern 2: Raw CSV data with molecular/activity headers
-        # Look for lines that look like CSV headers
-        csv_header_keywords = [
-            'smiles', 'compound', 'molecule', 'name', 'id',
-            'ic50', 'ec50', 'ki', 'kd', 'activity', 'potency',
-            'quality', 'duplicate'
+        # Look for file paths
+        file_patterns = [
+            (r'((?:\./|\.\./)?[a-zA-Z0-9_\-]+(?:/[a-zA-Z0-9_\-\.]+)*\.csv)', 'csv'),
+            (r'((?:\./|\.\./)?[a-zA-Z0-9_\-]+(?:/[a-zA-Z0-9_\-\.]+)*\.xlsx?)', 'excel'),
+            (r'((?:\./|\.\./)?[a-zA-Z0-9_\-]+(?:/[a-zA-Z0-9_\-\.]+)*\.sdf)', 'sdf'),
         ]
         
-        lines = text.split('\n')
-        csv_start_idx = None
-        
-        for i, line in enumerate(lines):
-            line_lower = line.lower()
-            # Check if this line looks like a CSV header
-            if ',' in line:
-                matching_keywords = sum(1 for kw in csv_header_keywords if kw in line_lower)
-                if matching_keywords >= 2:  # At least 2 keywords suggest CSV header
-                    csv_start_idx = i
-                    break
-        
-        if csv_start_idx is not None:
-            # Find the end of CSV data (empty line or text without commas)
-            csv_lines = []
-            for line in lines[csv_start_idx:]:
-                stripped = line.strip()
-                if not stripped:  # Empty line - might be end of CSV
-                    if csv_lines:  # Only break if we already have data
-                        break
-                    continue
-                if ',' not in stripped and len(csv_lines) > 0:
-                    # Non-CSV line after we started collecting
-                    break
-                csv_lines.append(stripped)
-            
-            if len(csv_lines) >= 2:  # Header + at least one data row
-                return '\n'.join(csv_lines)
-        
-        return None
-
-    def _parse_inline_csv_data(self, csv_content: str) -> Dict[str, Any]:
-        """Parse inline CSV content into compound data.
-        
-        Uses LLM-assisted column detection similar to ExtractFromCSVTool.
-        
-        Args:
-            csv_content: CSV string to parse.
-            
-        Returns:
-            Extracted data dict with 'compounds' and 'columns' keys.
-        """
-        console.print("   [dim]Parsing inline CSV data...[/]")
-        
-        try:
-            # Parse CSV with pandas
-            df = pd.read_csv(io.StringIO(csv_content))
-            console.print(f"   [dim]Parsed {len(df)} rows, columns: {list(df.columns)}[/]")
-            
-            # Use LLM to detect column mappings
-            column_mapping = self._detect_columns_with_llm(df)
-            
-            smiles_col = column_mapping.get('smiles_col')
-            name_col = column_mapping.get('name_col')
-            activity_cols = column_mapping.get('activity_cols', [])
-            
-            if not smiles_col or smiles_col not in df.columns:
-                # Try common SMILES column names
-                for col in ['smiles', 'SMILES', 'Smiles', 'canonical_smiles', 'smi']:
-                    if col in df.columns:
-                        smiles_col = col
-                        break
-            
-            if not smiles_col:
-                console.print("[red]✗ No SMILES column found in CSV[/]")
-                return {"compounds": [], "error": "No SMILES column found"}
-            
-            # Build compounds list
-            compounds = []
-            for idx, row in df.iterrows():
-                smiles = str(row[smiles_col]).strip() if pd.notna(row[smiles_col]) else None
-                if not smiles or smiles.lower() in ['nan', 'none', '']:
-                    continue
-                
-                # Get compound ID from name column or generate one
-                compound_id = None
-                if name_col and pd.notna(row.get(name_col)):
-                    compound_id = str(row[name_col])
-                if not compound_id:
-                    compound_id = f"Cpd-{idx+1}"
-                
-                # Build activities dict and get primary activity
-                activities = {}
-                primary_activity = None
-                
-                for act_col in activity_cols:
-                    if act_col in df.columns and pd.notna(row.get(act_col)):
-                        val = row[act_col]
-                        try:
-                            # Handle string values like ">200"
-                            if isinstance(val, str):
-                                val_clean = val.replace('>', '').replace('<', '').strip()
-                                float_val = float(val_clean)
-                            else:
-                                float_val = float(val)
-                            
-                            activities[act_col] = float_val
-                            if primary_activity is None:
-                                primary_activity = float_val
-                        except (ValueError, TypeError):
-                            # Keep original value if cannot parse
-                            activities[act_col] = val
-                
-                compound = {
-                    "smiles": smiles,
-                    "compound_id": compound_id,
-                    "name": compound_id,
-                    "activity": primary_activity,
-                    "activities": activities,
-                    "properties": {},
+        for pattern, file_type in file_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return {
+                    "source_type": "file",
+                    "file_path": match.group(1),
+                    "file_type": file_type,
+                    "csv_content": None,
                 }
-                
-                # Add other columns as properties (exclude smiles, name, and activity columns)
-                for col in df.columns:
-                    if col not in [smiles_col, name_col] + activity_cols:
-                        if pd.notna(row.get(col)):
-                            compound["properties"][col] = row[col]
-                
-                compounds.append(compound)
-            
-            console.print(f"   [dim]Extracted {len(compounds)} compounds from inline CSV[/]")
-            
-            return {
-                "compounds": compounds,
-                "columns": column_mapping,
-                "source": "inline_csv",
-                "activity_columns": activity_cols,  # Pass activity columns for downstream use
-            }
-            
-        except Exception as e:
-            console.print(f"[red]✗ Failed to parse inline CSV: {e}[/]")
-            logger.error(f"Inline CSV parse error: {e}")
-            return {"compounds": [], "error": str(e)}
-
-    def _detect_columns_with_llm(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Use LLM to detect SMILES, name, and activity columns.
         
-        Args:
-            df: DataFrame to analyze.
-            
-        Returns:
-            Column mapping dict with smiles_col, name_col, activity_cols.
-        """
-        columns = list(df.columns)
-        sample_rows = df.head(3).to_dict('records')
-        
-        prompt = f"""Analyze these CSV columns and sample data to identify:
-1. SMILES column (contains molecular SMILES strings)
-2. Name/ID column (compound identifier)
-3. Activity columns (IC50, EC50, Ki, etc.)
+        return {"source_type": "unknown", "file_path": None, "file_type": None, "csv_content": None}
 
-Columns: {columns}
-Sample data: {sample_rows}
-
-Return JSON:
-{{
-  "smiles_col": "column_name or null",
-  "name_col": "column_name or null", 
-  "activity_cols": ["col1", "col2"]
-}}"""
+    def _resolve_file_path(self, file_path: str) -> Optional[str]:
+        """Resolve file path using the tool."""
+        if not self.resolve_path_tool:
+            # Fallback manual resolution
+            from pathlib import Path
+            for candidate in [
+                Path(file_path),
+                Path.cwd() / file_path.lstrip('./'),
+                Path.cwd() / file_path.lstrip('/'),
+            ]:
+                if candidate.exists():
+                    return str(candidate)
+            return None
         
         try:
-            response = self.llm.invoke(prompt)
-            content = response.content if hasattr(response, 'content') else str(response)
-            
-            # Extract JSON from response
-            json_match = re.search(r'\{[^{}]+\}', content, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
+            result = self.resolve_path_tool.invoke(file_path)
+            if isinstance(result, str):
+                result = json.loads(result)
+            if result.get("success"):
+                return result["resolved_path"]
+            return None
         except Exception as e:
-            logger.warning(f"LLM column detection failed: {e}")
-        
-        # Fallback: heuristic detection
-        mapping = {"smiles_col": None, "name_col": None, "activity_cols": []}
-        
-        for col in columns:
-            col_lower = col.lower()
-            if 'smiles' in col_lower or col_lower == 'smi':
-                mapping["smiles_col"] = col
-            elif any(k in col_lower for k in ['name', 'id', 'compound', 'number']):
-                if not mapping["name_col"]:
-                    mapping["name_col"] = col
-            elif any(k in col_lower for k in ['ic50', 'ec50', 'ki', 'kd', 'activity', 'potency', 'inhibit']):
-                mapping["activity_cols"].append(col)
-        
-        return mapping
-
-    def _get_extractor_for_file(self, file_path: str):
-        """Get appropriate extractor tool based on file extension."""
-        ext = file_path.lower().split('.')[-1]
-        if ext == 'csv':
-            return self.extractor_tools[0]  # CSV
-        elif ext in ['xlsx', 'xls']:
-            return self.extractor_tools[1]  # Excel
-        elif ext in ['sdf', 'sd', 'mol']:
-            return self.extractor_tools[2]  # SDF
-        return None
-
-    def _get_uploaded_file_path(self, state: AgentState) -> Optional[str]:
-        """Return the first existing uploaded file path from agent state."""
-        uploads = state.get("uploaded_files") or []
-        for upload in uploads:
-            if not isinstance(upload, dict):
-                continue
-            candidate = upload.get("file_path")
-            if candidate and os.path.exists(candidate):
-                return candidate
-        return None
+            logger.error(f"Path resolution error: {e}")
+            return None
 
     def run(self, state: AgentState) -> AgentState:
-        """Execute data extraction and standardization.
+        """Execute data extraction with LLM-assisted decisions.
         
-        The agent decides:
-        1. Data source: file path or inline CSV data
-        2. Which extractor tool to use based on file type (if file)
-        3. How to clean and standardize the data
-        4. Where to save the output
-        
-        Args:
-            state: Agent state with task info.
-            
-        Returns:
-            Updated state with extracted and cleaned data.
+        Workflow:
+        1. LLM detects data source (file/inline)
+        2. Resolve file path if needed
+        3. Call appropriate extractor
+        4. Clean extracted data
+        5. Save results
         """
         console.print("\n[bold cyan]🧹 DataCleaner: AI-driven extraction...[/]")
 
         tid = state.get("current_task_id", "data_extraction")
         task = state.get("tasks", {}).get(tid, {})
         
-        # Get input content
+        # Build input text
         description = task.get("description", "")
         inputs = task.get("inputs", {})
         user_query = state.get("user_query", "")
+        combined_text = f"{user_query}\n{description}\n{inputs.get('data', '')}"
         
-        # Combined text for analysis
-        combined_text = f"{description}\n{user_query}\n{inputs.get('data', '')}"
+        console.print(f"   [dim]Analyzing input...[/]")
         
-        # Try to find file path first
-        content = inputs.get("data") or inputs.get("file_path") or ""
-        if not content:
-            content = self._extract_file_path(description) or self._extract_file_path(user_query) or ""
-
-        file_path = self._extract_file_path(content) if content else None
-        if not file_path:
-            uploaded_path = self._get_uploaded_file_path(state)
-            if uploaded_path:
-                file_path = uploaded_path
-                console.print(f"   [dim]Using uploaded file: {uploaded_path}[/]")
+        # Step 1: LLM detects data source
+        source_info = self._detect_data_source(combined_text)
+        source_type = source_info.get("source_type", "unknown")
         
-        # Check if we have a valid file path - resolve it first
         extracted_data = None
-        data_source = None
-        resolved_path = self._resolve_path(file_path) if file_path else None
         
-        if resolved_path:
-            # Source 1: File-based extraction
-            console.print(f"   [dim]File: {resolved_path}[/]")
-            data_source = "file"
+        # Step 2 & 3: Extract based on source type
+        if source_type == "file":
+            file_path = source_info.get("file_path")
+            file_type = source_info.get("file_type", "csv")
             
-            try:
-                extractor = self._get_extractor_for_file(resolved_path)
-                if not extractor:
-                    if "results" not in state:
-                        state["results"] = {}
-                    state["results"][tid] = {"error": f"Unsupported file type: {resolved_path}"}
-                    return state
-                
-                console.print(f"   [dim]Using extractor: {extractor.name}[/]")
-                extracted_data = extractor.invoke(resolved_path)
-            except Exception as e:
-                console.print(f"[red]✗ File extraction error: {e}[/]")
-                logger.error(f"File extraction error: {e}")
-                extracted_data = None
-        
-        # Try inline CSV if no file found or file extraction failed
-        if extracted_data is None or not extracted_data.get("compounds"):
-            # Source 2: Inline CSV extraction
-            csv_content = self._extract_inline_csv(combined_text)
+            console.print(f"   [dim]Detected file: {file_path} ({file_type})[/]")
             
-            if csv_content:
-                console.print("   [dim]Detected inline CSV data[/]")
-                data_source = "inline_csv"
-                extracted_data = self._parse_inline_csv_data(csv_content)
-            elif file_path and not os.path.exists(file_path):
+            # Resolve path
+            resolved = self._resolve_file_path(file_path)
+            if not resolved:
                 console.print(f"[red]✗ File not found: {file_path}[/]")
-                if "results" not in state:
-                    state["results"] = {}
-                state["results"][tid] = {"error": f"File not found: {file_path}"}
-                return state
-        
-        # Check if we have any data
-        if extracted_data is None or not extracted_data.get("compounds"):
-            console.print("[red]✗ No data source found (no file path or inline CSV)[/]")
-            if "results" not in state:
-                state["results"] = {}
-            state["results"][tid] = {"error": "No data source found. Please provide a file path or inline CSV data."}
-            return state
-        
-        # Log data source info
-        console.print(f"   [dim]Data source: {data_source}[/]")
-        
-        compounds = extracted_data.get("compounds", [])
-        console.print(f"   [dim]Extracted: {len(compounds)} compounds[/]")
-        
-        try:
-            # Step 2: Clean and standardize data
-            if compounds:
-                cleaner = self.standardize_tools[0]  # CleanCompoundDataTool
-                clean_result = cleaner.invoke({"compounds": compounds})
-                
-                cleaned_compounds = clean_result.get("compounds", [])
-                console.print(f"   [dim]Cleaned: {clean_result.get('cleaned_count')} compounds[/]")
-                
-                # Update extracted data with cleaned compounds
-                extracted_data["compounds"] = cleaned_compounds
-                extracted_data["cleaning_stats"] = {
-                    "original_count": clean_result.get("original_count"),
-                    "cleaned_count": clean_result.get("cleaned_count"),
-                    "removed": clean_result.get("removed"),
+                state.setdefault("results", {})[tid] = {
+                    "success": False,
+                    "error": f"File not found: {file_path}",
+                    "compounds": [],
                 }
+                return state
             
-            # Step 3: Save output
-            saver = self.standardize_tools[1]  # SaveCleanedDataTool
-            output_files = saver.invoke({"data": extracted_data, "task_id": tid})
-            extracted_data["output_files"] = output_files
+            console.print(f"   [dim]Resolved: {resolved}[/]")
             
-            # Preserve activity columns metadata for multi-activity report support
-            extracted_data["activity_columns"] = extracted_data.get("columns", {}).get("activity_cols", [])
+            # Select and run extractor
+            extractor = {
+                "csv": self.extract_csv_tool,
+                "excel": self.extract_excel_tool,
+                "sdf": self.extract_sdf_tool,
+            }.get(file_type)
             
-            # Update state
-            if "results" not in state:
-                state["results"] = {}
-            state["results"][tid] = extracted_data
-            
-            console.print(f"[green]✓ DataCleaner: Processed {len(extracted_data.get('compounds', []))} compounds[/]")
-            for fmt, path in output_files.items():
-                console.print(f"   [dim]{fmt.upper()}: {path}[/]")
-                
-        except Exception as e:
-            console.print(f"[red]✗ DataCleaner error: {e}[/]")
-            logger.error(f"DataCleaner error: {e}")
-            if "results" not in state:
-                state["results"] = {}
-            state["results"][tid] = {"error": str(e)}
-
+            if extractor:
+                try:
+                    console.print(f"   [dim]Extracting with {extractor.name}...[/]")
+                    extracted_data = extractor.invoke(resolved)
+                except Exception as e:
+                    console.print(f"[red]✗ Extraction error: {e}[/]")
+                    extracted_data = None
+        
+        elif source_type == "inline_csv":
+            csv_content = source_info.get("csv_content")
+            if csv_content and self.parse_inline_csv_tool:
+                console.print(f"   [dim]Parsing inline CSV...[/]")
+                extracted_data = self.parse_inline_csv_tool.invoke(csv_content)
+        
+        # Step 4: Clean data if extracted
+        if extracted_data and extracted_data.get("compounds") and self.clean_data_tool:
+            try:
+                console.print(f"   [dim]Cleaning {len(extracted_data['compounds'])} compounds...[/]")
+                # Pass compounds as dict with list, not JSON string
+                cleaned = self.clean_data_tool.invoke({"compounds": extracted_data["compounds"]})
+                if isinstance(cleaned, str):
+                    cleaned = json.loads(cleaned)
+                if isinstance(cleaned, dict) and cleaned.get("compounds"):
+                    extracted_data["compounds"] = cleaned["compounds"]
+            except Exception as e:
+                logger.warning(f"Data cleaning error: {e}")
+        
+        # Step 5: Save cleaned data to files
+        output_files = {}
+        compounds = extracted_data.get("compounds", []) if extracted_data else []
+        
+        if compounds and self.save_data_tool:
+            try:
+                console.print(f"   [dim]Saving {len(compounds)} compounds to files...[/]")
+                save_result = self.save_data_tool.invoke({
+                    "data": extracted_data,
+                    "task_id": tid,
+                })
+                if isinstance(save_result, str):
+                    save_result = json.loads(save_result)
+                if isinstance(save_result, dict):
+                    output_files = save_result
+                    if "json" in output_files:
+                        console.print(f"   [dim]Saved JSON: {output_files['json']}[/]")
+                    if "csv" in output_files:
+                        console.print(f"   [dim]Saved CSV: {output_files['csv']}[/]")
+            except Exception as e:
+                logger.warning(f"Data save error: {e}")
+        
+        # Store results with output files
+        state.setdefault("results", {})[tid] = {
+            "success": bool(compounds),
+            "compounds": compounds,
+            "activity_columns": extracted_data.get("activity_columns", []) if extracted_data else [],
+            "source_file": extracted_data.get("source_file", "") if extracted_data else "",
+            "extracted_data": extracted_data or {},
+            "output_files": output_files,
+        }
+        
+        if compounds:
+            console.print(f"[green]✓ Extracted {len(compounds)} compounds[/]")
+        else:
+            console.print("[yellow]⚠ No compounds extracted[/]")
+        
         return state
