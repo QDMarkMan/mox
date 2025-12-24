@@ -1,4 +1,4 @@
-# molx-agent
+# Mox
 
 <div align="center">
 
@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/github/license/xtalpi.com/molx-agent)](https://github.com/xtalpi.com/molx-agent/blob/main/LICENSE)
 ![Coverage Report](assets/images/coverage.svg)
 
-Drug design agent
+A **mol agent** used for drug design from **X**talPi, you can refer to it simply as **mox**.
 
 </div>
 
@@ -21,6 +21,7 @@ Drug design agent
 ### Prerequisites
 
 - Python 3.12+
+- Node.js 22+ (for client development, optional)
 - [uv](https://docs.astral.sh/uv/) - Fast Python package manager
 
 ### Installation
@@ -249,32 +250,44 @@ make cleanup
 
 ## Running the API server
 
-MolX 的 FastAPI 后端打包在 `molx_server`，需要安装 server extra：
+The MolX FastAPI backend is packaged in `molx_server`; install the server extra before running:
 
 ```bash
 uv sync --extra dev --extra server
-make serve            # 等价于 uv run molx-server run --reload
+make serve-api            # equivalent to uv run molx-server run --reload
 ```
 
-默认监听 `http://127.0.0.1:8000`，OpenAPI 文档位于 `/docs`。若要自定义主机/端口，可在 `make serve` 前导出 `MOLX_SERVER_HOST/MOLX_SERVER_PORT` 或直接运行 `uv run molx-server run --host 0.0.0.0 --port 9000`。
+The server listens on `http://127.0.0.1:8000` by default with OpenAPI docs at `/docs`. To customize the host/port, export `MOLX_SERVER_HOST`/`MOLX_SERVER_PORT` before `make serve` or run `uv run molx-server run --host 0.0.0.0 --port 9000` directly.
 
 ## Web client preview
 
-`molx_client` 提供基于 React + Vite 的最小聊天界面：
+`molx_client` ships a React + Vite chat UI:
 
+1. Install dependencies
 ```bash
+
 cd molx_client
 pnpm install
 echo "VITE_API_BASE=http://localhost:8000/api/v1" > .env.local
 pnpm dev
 ```
+2. Start the service
+```bash
+make serve-client
+```
 
-浏览器访问 `http://localhost:5173` 即可连到本地 API。修改 `VITE_API_BASE` 可指向远程部署。
+Visit `http://localhost:5173` to connect to the local API. Update `VITE_API_BASE` to point at a remote deployment.
 
 ## Architecture & Docs
 
-- [SAR Agent POC 报告](docs/sar_agent_poc.md)：当前能力、演示流程与下一步计划。
-- 
+- [POC Report](docs/sar_agent_poc.md): Current capabilities, demo flow, and next steps.
+- [review.md](review.md): Known issues and risks for Agent/Mem/Server/Client.
+- [todo.md](todo.md): TODOs for Agent/Mem/Server/Client.
+
+- [Agent Design](molx_agent/README.md)
+- [Memory Design](molx_core/README.md)
+- [Server Design](molx_server/README.md)
+- [Client Design](molx_client/README.md)
 
 ## 🛡 License
 

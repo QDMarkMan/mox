@@ -25,15 +25,7 @@ from rich.console import Console
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.state import AgentState
 from molx_agent.agents.modules.llm import get_llm
-from molx_agent.tools.extractor import (
-    ExtractFromCSVTool,
-    ExtractFromExcelTool,
-    ExtractFromSDFTool,
-)
-from molx_agent.tools.standardize import (
-    CleanCompoundDataTool,
-    SaveCleanedDataTool,
-)
+from molx_agent.agents.modules.tools import get_registry
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -94,17 +86,27 @@ class DataCleanerAgent(BaseAgent):
         # Initialize LLM
         self.llm = get_llm()
         
-        # Initialize ALL tools
-        self.extractor_tools = [
-            ExtractFromCSVTool(llm=self.llm),
-            ExtractFromExcelTool(llm=self.llm),
-            ExtractFromSDFTool(),
-        ]
+        # Get specific tools from registry by name
+        # (not by category, to avoid getting unrelated tools like StandardizeMolecule)
+        registry = get_registry()
         
-        self.standardize_tools = [
-            CleanCompoundDataTool(),
-            SaveCleanedDataTool(),
+        # Inject LLM into tools that require it
+        registry.inject_llm(self.llm)
+        
+        # Get specific extractor tools
+        self.extractor_tools = [
+            registry.get_tool_by_name("extract_from_csv"),
+            registry.get_tool_by_name("extract_from_excel"),
+            registry.get_tool_by_name("extract_from_sdf"),
         ]
+        self.extractor_tools = [t for t in self.extractor_tools if t is not None]
+        
+        # Get specific standardize tools for data cleaning
+        self.standardize_tools = [
+            registry.get_tool_by_name("clean_compound_data"),
+            registry.get_tool_by_name("save_cleaned_data"),
+        ]
+        self.standardize_tools = [t for t in self.standardize_tools if t is not None]
         
         self.tools = self.extractor_tools + self.standardize_tools
         

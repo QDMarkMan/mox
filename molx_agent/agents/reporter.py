@@ -17,11 +17,7 @@ from typing import Optional
 
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.state import AgentState
-from molx_agent.tools.report import (
-    RunFullSARAnalysisTool,
-    GenerateHTMLReportTool,
-    BuildReportSummaryTool,
-)
+from molx_agent.agents.modules.tools import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +46,11 @@ class ReporterAgent(BaseAgent):
             description="Runs SAR analyses and generates HTML reports using tools",
         )
         
-        # Initialize tools
-        self.analysis_tool = RunFullSARAnalysisTool()
-        self.report_tool = GenerateHTMLReportTool()
-        self.summary_tool = BuildReportSummaryTool()
+        # Get tools from registry
+        registry = get_registry()
+        self.analysis_tool = registry.get_tool_by_name("run_full_sar_analysis")
+        self.report_tool = registry.get_tool_by_name("generate_html_report")
+        self.summary_tool = registry.get_tool_by_name("build_report_summary")
 
     def run(self, state: AgentState) -> AgentState:
         """Run SAR analyses and generate report based on user intent.

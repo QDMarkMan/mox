@@ -33,6 +33,18 @@
 
 ## 核心 Agent 角色
 
+### Agent 职责与常用工具
+
+| Agent | 主要职责 | 常用工具/入口 | 说明 |
+| --- | --- | --- | --- |
+| IntentClassifierAgent | 意图判别、置信度与理由生成 | 无（LLM + `INTENT_CLASSIFIER_PROMPT`） | 写入 `intent`/`intent_confidence`/`intent_reasoning`，决定后续分支 |
+| PlannerAgent | 计划/反思/重规划，调度任务 DAG | 无（LLM + Planner/Reflect/Optimize prompts） | 仅生成/更新 `tasks`，不直接调用工具 |
+| DataCleanerAgent | 数据提取与清洗 | `ExtractFromCSVTool`/`ExtractFromExcelTool`/`ExtractFromSDFTool`、`CleanCompoundDataTool`、`SaveCleanedDataTool` | 负责识别列、标准化 SMILES、落盘清洗结果，产出供下游使用的文件路径 |
+| SARAgent | 结构与关系分析 | `ExtractScaffold`、`FindMCS`、`RGroupDecomposition`、`AnalyzeMMP`、`CalculateProperties`、`ValidateSARData`（及 `identify_ocat_series` 等辅助函数） | 选择骨架、拆分 R-group、匹配 OCAT/Activity cliff，生成结构化分析结果 |
+| ReporterAgent | 汇总洞察与生成报告 | `run_full_sar_analysis`、`generate_html_report`、`build_report_summary` 以及 `AnalyzeRGroupTable`/`IdentifyActivityCliffs`/`GenerateScaffoldSAR`/`GeneratePositionalSAR`/`GenerateConformationalSAR` | 聚合上游结果生成 HTML/摘要，写回 `output_files`/`report_path` |
+| ToolAgent | ReAct 工具代理，单轮问答/调试 | `get_all_tools(agent="tool_agent")` 加载允许的工具（标准化/转换等） | 通过 LangGraph ReAct 自动路由工具调用，适合轻量任务 |
+| MolxAgent（Orchestrator） | 组合各 Agent，维护状态机 | `get_tools_for_agent(...)` | 负责注入 LLM/工具、运行 LangGraph 流水线并产出最终答复 |
+
 ### MolxAgent
 - 封装 LangGraph pipeline，持有意图分类器、Planner 与 worker map，可通过构造函数注入自定义组件。
 - 提供 `run(state)` 与 `invoke(user_query, state=None)`，以及 `ChatSession` 以实现多轮对话、状态持久化与 `SessionRecorder` 接入。
@@ -50,8 +62,9 @@
 ### 数据/分析/报告 Worker
 - **DataCleanerAgent**：读取任务描述/输入自适应选择提取工具 (`ExtractFromCSV/Excel/SDF`)，随后串行调用 `CleanCompoundDataTool` 与 `SaveCleanedDataTool`，并在结果中保留 `activity_columns` 方便 Reporter。
 - **SARAgent**：封装规则与工具组合，选择 scaffold (`find_mcs_scaffold`/`find_common_murcko_scaffold`)，执行 R-group decomposition、OCAT pairing (`identify_ocat_series`)，并可生成单点扫描洞察。支持外部注入规则或 prompt，所有分析 metadata 写入结果字典中。
-- **ReporterAgent**：根据 Planner 传入的 `report_intent` 或从用户查询提取关键字，决定运行 Full/SINGLE_SITE/Molecule subset 分析。聚合 `RunFullSARAnalysisTool`、`GenerateHTMLReportTool`、`BuildReportSummaryTool` 输出报告与摘要。
+- **ReporterAgent**：根据 Planner 传入的 `report_intent` 或从用户查询提取关键字，决定运行 Full/SINGLE_SITE/Molecule subset 分析。聚合 `run_full_sar_analysis`、`generate_html_report`、`build_report_summary`（及分析类工具）输出报告与摘要。
 - **ToolAgent**（可选）：基于 `create_react_agent` 自动处理工具调用任务，适合单次问答型任务或调试工具链。
+
 
 ## 共享基础模块
 
@@ -62,23 +75,48 @@
 - **`modules/mcp.py`**：`MCPToolLoader` 支持从文件/环境/配置对象中读取 server 列表，懒加载 `langchain-mcp-adapters`，暴露同步与异步 `get_mcp_tools` 接口。
 - **`modules/prompts.py`**：包含 Planner/Reflect/Optimize 及其它 worker prompt，可直接 import 覆盖或在运行时修改。
 
-## 工具与 MCP 配置
+## Agent tools 模块：设计模式与开发指南
 
-1. 本地工具：确保 `molx_agent/tools/` 下的依赖可被导入（RDKit、标准化工具等），`get_all_tools()` 会自动捕获 ImportError 并记录日志。
-2. MCP：
-   - 在 `config/mcp_servers.json` 或环境变量 `MCP_SERVERS_CONFIG` 中声明 server：
-     ```json
-     {
-       "chemistry": {
-         "command": "python",
-         "args": ["./examples/example_mcp_server.py"],
-         "transport": "stdio"
-       }
-     }
-     ```
-   - 或者配置 HTTP 端点：`{"search": {"url": "http://localhost:8000/mcp", "transport": "http"}}`
-   - 在 `.env`/环境中设置 `MCP_ENABLED=true` 以启用；若需禁用，置 `false` 或不配置 server。
-3. Reporter/SAR 等工具会在结果中写入 `output_files`/`report_path`，LangGraph `finalize` 节点据此拼接总结。
+### 设计模式
+- **工具实现**：`molx_agent/tools/*.py` 基于 `langchain_core.tools.BaseTool`，通过 Pydantic `args_schema` 声明输入，`_run` 返回 JSON 字符串或字典；涉及文件输出时统一使用 `get_tool_output_dir()` 生成带时间戳的安全路径（如 `SaveCleanedDataTool`）。
+- **注册中心**：`molx_agent.agents.modules.tools.ToolRegistry` 为单例，提供懒加载、分类管理、按 agent 过滤与缓存；`ToolCategory` 将工具分为 `rdkit`/`sar`/`report`/`extractor`/`standardize`/`converter`/`mcp`，默认 `_load_*` loader 首次调用时批量注册。
+- **访问入口**：`molx_agent/tools/__init__.py` 暴露 `get_all_tools(category=None, agent=None)`、`get_tool_names()`、`get_registry()`，并延迟导入重型依赖；`ToolRegistry.inject_llm(llm)` 会为标记 `requires_llm=True` 的工具注入 LLM（如 CSV/Excel 列识别）。
+- **权限与筛选**：注册时可用 `allowed_agents` 限定可访问的 agent（提取/清洗工具仅对 `data_cleaner` 开放，单分子转换工具限定 `tool_agent`），`get_tools(agent="...")` 自动过滤；`requires_llm` 用于标记需要额外注入的工具。
+
+### Agent 调用 Tool 的方式
+- **ReAct/ToolAgent 场景**：`ToolAgent` 使用 `get_all_tools(agent="tool_agent")` 拉取允许的工具列表，并通过 LangGraph 的 `create_react_agent` 注入，LLM 会在对话中自动触发工具调用并把返回值写入消息。
+- **Pipeline Worker 场景**：`DataCleanerAgent`、`SARAgent`、`ReporterAgent` 在节点逻辑中显式调用工具实例（如 `ExtractFromCSVTool` → `CleanCompoundDataTool` → `SaveCleanedDataTool`），结果写入 `state['results'][task_id]`，Planner 再据此调度后续任务。
+- **LLM 依赖注入**：对标记 `requires_llm=True` 的工具（CSV/Excel 提取），`ToolRegistry.inject_llm(llm)` 在 Agent 初始化时统一设置；未注入时会降级到关键词匹配策略。
+- **按 Agent 过滤**：`get_all_tools(agent="<agent_name>")` 仅返回允许的工具，避免 Planner/LLM 调用不适用的工具；如需跨 agent 复用，放宽注册时的 `allowed_agents`。
+- **调用示例**：
+  ```python
+  registry = get_registry()
+  tools = registry.get_tools(agent="data_cleaner")
+  registry.inject_llm(llm)
+  # 在 LangGraph 节点中直接调用 tool._run(...) 或交给 create_react_agent 处理
+  ```
+
+### 开发指南
+1. **定义工具**：编写 `BaseTool` 子类，设置 `name`/`description`/`args_schema`，在 `_run` 返回结构化 JSON/字典，异常返回明确错误信息而非吞掉。
+2. **输出约定**：批处理或持久化场景使用 `get_tool_output_dir("<module>")` 写文件并返回路径；参考 `CleanCompoundDataTool`/`ValidateSARData` 的校验策略，避免未捕获异常。
+3. **注册工具**：在对应 loader（`_load_sar_tools`、`_load_standardize_tools` 等）调用 `registry.register(tool, ToolCategory.X, allowed_agents=[...], requires_llm=...)`；若新增类别，需扩展 `ToolCategory` 并在 `_register_default_loaders` 挂载 loader。
+4. **接入 Agent**：Agent 侧通过 `get_all_tools(agent="data_cleaner")`/`get_tools_for_agent("reporter")` 获取工具；Planner/Prompt 若需要识别新工具类型，请同步更新任务模板与提示词。
+5. **调试与验收**：使用 `get_tool_names()` 或 `registry.list_tools()` 查看加载结果，日志会报告 ImportError 或 MCP 配置缺失；必要时在 `tests/` 添加针对工具输入输出的单测或冒烟脚本。
+
+## MCP 支持
+
+- 在 `config/mcp_servers.json` 或环境变量 `MCP_SERVERS_CONFIG` 中声明 server：
+  ```json
+  {
+    "chemistry": {
+      "command": "python",
+      "args": ["./examples/example_mcp_server.py"],
+      "transport": "stdio"
+    }
+  }
+  ```
+- 或者配置 HTTP 端点：`{"search": {"url": "http://localhost:8000/mcp", "transport": "http"}}`
+- 在 `.env`/环境中设置 `MCP_ENABLED=true` 以启用；若需禁用，置 `false` 或不配置 server。
 
 ## 扩展指南
 

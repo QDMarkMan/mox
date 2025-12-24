@@ -16,7 +16,7 @@ from langgraph.prebuilt import create_react_agent
 from molx_agent.agents.base import BaseAgent
 from molx_agent.agents.modules.llm import get_llm
 from molx_agent.agents.modules.state import AgentState
-from molx_agent.agents.modules.tools import get_all_tools
+from molx_agent.agents.modules.tools import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,8 @@ class ToolAgent(BaseAgent):
         """Get or create the ReAct agent."""
         if self._agent is None:
             llm = get_llm()
-            self._tools = get_all_tools()
+            registry = get_registry()
+            self._tools = registry.get_tools(agent=self.name)
             if self._tools:
                 self._agent = create_react_agent(llm, self._tools)
         return self._agent

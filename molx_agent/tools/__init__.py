@@ -26,4 +26,11 @@ def get_tool_names() -> List[str]:
     return _get_tool_names()
 
 
-__all__ = ["get_all_tools", "get_tool_names"]
+def get_registry():
+    """Get the singleton ToolRegistry instance."""
+    from molx_agent.agents.modules.tools import get_registry as _get_registry
+
+    return _get_registry()
+
+
+__all__ = ["get_all_tools", "get_tool_names", "get_registry"]

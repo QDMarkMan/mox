@@ -1,3 +1,11 @@
+# /****************************************************************************
+# *  @Copyright 2025 XtalPi Systems.
+# *  @Author [tongfu.e@xtalpi.com].
+# *  @Date [2025-12-24 13:22:42].
+# *  @Description Dockerfile for molx_agent.
+# *  @FIXME: 暂不可用
+# ***************************************************************************/
+
 FROM python:3.12-slim-bookworm
 
 ENV LANG=C.UTF-8 \

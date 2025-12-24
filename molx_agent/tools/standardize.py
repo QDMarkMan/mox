@@ -22,6 +22,20 @@ from molx_agent.utils.paths import get_tool_output_dir
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# Input Schemas for Standardize Tools
+# =============================================================================
+
+class StandardizeMoleculeInput(BaseModel):
+    """Input for StandardizeMolecule."""
+    smiles: str = Field(description="SMILES string to standardize")
+
+
+class BatchStandardizeInput(BaseModel):
+    """Input for BatchStandardize."""
+    smiles_list: str = Field(description="SMILES strings, comma or newline separated")
+
+
 class StandardizeMolecule(BaseTool):
     """Standardize and normalize molecular structures."""
 
@@ -30,6 +44,7 @@ class StandardizeMolecule(BaseTool):
         "Standardize a SMILES string: remove salts, neutralize charges, "
         "canonicalize tautomers. Input: SMILES string."
     )
+    args_schema: type[BaseModel] = StandardizeMoleculeInput
 
     def _run(self, smiles: str) -> str:
         try:
@@ -73,6 +88,7 @@ class BatchStandardize(BaseTool):
         "Standardize multiple SMILES (comma or newline separated). "
         "Returns list of standardized SMILES."
     )
+    args_schema: type[BaseModel] = BatchStandardizeInput
 
     def _run(self, smiles_list: str) -> str:
         try:

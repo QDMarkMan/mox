@@ -11,11 +11,35 @@
 from typing import Any, Optional
 
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel, Field
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 
 from molx_agent.tools.utils import tanimoto
 
+
+# =============================================================================
+# Input Schemas
+# =============================================================================
+
+class MolSimilarityInput(BaseModel):
+    """Input for MolSimilarity."""
+    smiles_pair: str = Field(description="Two SMILES separated by '.'")
+
+
+class SMILES2WeightInput(BaseModel):
+    """Input for SMILES2Weight."""
+    smiles: str = Field(description="SMILES string")
+
+
+class FuncGroupsInput(BaseModel):
+    """Input for FunctionalGroups."""
+    smiles: str = Field(description="SMILES string")
+
+
+# =============================================================================
+# Tools
+# =============================================================================
 
 class MolSimilarity(BaseTool):
     """Calculate Tanimoto similarity between two molecules."""
@@ -24,6 +48,7 @@ class MolSimilarity(BaseTool):
     description: str = (
         "Input two molecule SMILES (separated by '.'), returns Tanimoto similarity."
     )
+    args_schema: type[BaseModel] = MolSimilarityInput
 
     def _run(self, smiles_pair: str) -> str:
         smi_list = smiles_pair.split(".")
@@ -63,6 +88,7 @@ class SMILES2Weight(BaseTool):
 
     name: str = "SMILES2Weight"
     description: str = "Input SMILES, returns molecular weight."
+    args_schema: type[BaseModel] = SMILES2WeightInput
 
     def _run(self, smiles: str) -> str:
         mol = Chem.MolFromSmiles(smiles)
@@ -79,6 +105,7 @@ class FuncGroups(BaseTool):
     description: str = (
         "Input SMILES, return list of functional groups in the molecule."
     )
+    args_schema: type[BaseModel] = FuncGroupsInput
     dict_fgs: Optional[dict[str, str]] = None
 
     def __init__(self, **kwargs: Any) -> None:
@@ -124,3 +151,4 @@ class FuncGroups(BaseTool):
                 return "No common functional groups detected."
         except Exception:
             return "Wrong argument. Please input a valid molecular SMILES."
+

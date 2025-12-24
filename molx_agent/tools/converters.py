@@ -12,6 +12,7 @@
 from typing import Any, Optional
 
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel, Field
 
 from molx_agent.tools.utils import (
     is_multiple_smiles,
@@ -22,11 +23,35 @@ from molx_agent.tools.utils import (
 )
 
 
+# =============================================================================
+# Input Schemas
+# =============================================================================
+
+class Query2SMILESInput(BaseModel):
+    """Input for Query2SMILES."""
+    query: str = Field(description="Molecule name to convert to SMILES")
+
+
+class Query2CASInput(BaseModel):
+    """Input for Query2CAS."""
+    query: str = Field(description="Molecule name or SMILES to convert to CAS")
+
+
+class SMILES2NameInput(BaseModel):
+    """Input for SMILES2Name."""
+    query: str = Field(description="SMILES string to convert to molecule name")
+
+
+# =============================================================================
+# Tools
+# =============================================================================
+
 class Query2SMILES(BaseTool):
     """Convert molecule name to SMILES."""
 
     name: str = "Name2SMILES"
     description: str = "Input a molecule name, returns SMILES."
+    args_schema: type[BaseModel] = Query2SMILESInput
     url: Optional[str] = None
 
     def __init__(self, **kwargs: Any) -> None:
@@ -48,6 +73,7 @@ class Query2CAS(BaseTool):
 
     name: str = "Mol2CAS"
     description: str = "Input molecule (name or SMILES), returns CAS number."
+    args_schema: type[BaseModel] = Query2CASInput
     url_cid: Optional[str] = None
     url_data: Optional[str] = None
 
@@ -77,6 +103,7 @@ class SMILES2Name(BaseTool):
 
     name: str = "SMILES2Name"
     description: str = "Input SMILES, returns molecule name."
+    args_schema: type[BaseModel] = SMILES2NameInput
 
     def _run(self, query: str) -> str:
         try:
@@ -89,4 +116,5 @@ class SMILES2Name(BaseTool):
             return name
         except Exception as e:
             return "Error: " + str(e)
+
 
