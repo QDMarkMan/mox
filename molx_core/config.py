@@ -15,7 +15,10 @@ ENV_FILE = ".env.local" if os.path.exists(".env.local") else ".env"
 
 
 class CoreSettings(BaseSettings):
-    """Core configuration loaded from environment variables."""
+    """Core configuration loaded from environment variables.
+    
+    Session settings here are the authoritative source for all modules.
+    """
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -34,12 +37,15 @@ class CoreSettings(BaseSettings):
     database_max_overflow: int = 10
     database_pool_timeout: float = 30.0
 
-    # Session settings
-    session_ttl: int = 3600  # 1 hour in seconds
-    session_cleanup_interval: int = 300  # 5 minutes
+    # Session settings (authoritative for all modules)
+    session_ttl: int = 315360000  # 10 years - keep sessions permanently by default
+    session_cleanup_enabled: bool = False  # Disable auto cleanup by default
+    session_cleanup_interval: int = 86400  # Check daily when enabled
+    session_max_count: int = 5000  # Maximum number of sessions
 
 
 @lru_cache
 def get_core_settings() -> CoreSettings:
     """Get cached core settings instance."""
     return CoreSettings()
+

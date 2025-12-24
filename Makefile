@@ -69,14 +69,18 @@ cleanup:
 	find . | grep -E ".pytest_cache" | xargs rm -rf
 	rm -rf build/
 
-serve-api:
-	uv run molx-server run
+serve:
+	make serve-api & make dev-client
 
+serve-api:
+	uv run molx-server run --verbose
+
+# ------------------------------Client------------------------------ //
 serve-client:
 	cd molx_client && npm run dev
 
-serve:
-	make serve-api & make dev-client
+install-client:
+	cd molx_client && npm install
 
 help:
 	@echo "lock                                      Lock the dependencies."
@@ -91,6 +95,7 @@ help:
 	@echo "docker-remove                             Remove the docker image."
 	@echo "serve-api                                 Run the FastAPI server."
 	@echo "serve-client                              Run the molx_client."
+	@echo "install-client                            Install the molx_client dependencies."
 	@echo "serve                                     Run the FastAPI server and molx_client."
 	@echo "cleanup                                   Clean the project directory."
 	@echo "help                                      Display this help message."

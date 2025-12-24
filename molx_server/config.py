@@ -2,6 +2,7 @@
 Server configuration management for molx-server.
 
 Uses pydantic-settings for environment-based configuration.
+Session settings are managed by molx_core.config.CoreSettings.
 """
 
 import os
@@ -15,7 +16,11 @@ ENV_FILE = ".env.local" if os.path.exists(".env.local") else ".env"
 
 
 class ServerSettings(BaseSettings):
-    """Server configuration loaded from environment variables."""
+    """Server configuration loaded from environment variables.
+    
+    Note: Session TTL, cleanup interval, and cleanup enabled settings
+    are managed by molx_core.config.CoreSettings (MOLX_ prefix).
+    """
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
@@ -28,7 +33,7 @@ class ServerSettings(BaseSettings):
     # Server settings
     host: str = "0.0.0.0"
     port: int = 8000
-    debug: bool = True
+    debug: bool = False
     workers: int = 1
     reload: bool = False
 
@@ -53,18 +58,13 @@ class ServerSettings(BaseSettings):
     api_key_enabled: bool = False
     api_keys: list[str] = []
 
-    # Session settings (cleanup effectively disabled for persistence)
-    # Not auto cleanup now
-    session_ttl_seconds: int = 315360000  # 10 years - keep sessions permanently
-    session_cleanup_interval: int = 86400  # Check daily (rarely deletes anything)
-    max_sessions: int = 5000  # Increased for 50 users with many sessions
-
     # Streaming settings
     stream_chunk_size: int = 1
-    stream_timeout: float = 360.0  # Increased for AI summary generation
+    stream_timeout: float = 360.0  # Timeout for AI summary generation
 
 
 @lru_cache
 def get_server_settings() -> ServerSettings:
     """Get cached server settings instance."""
     return ServerSettings()
+

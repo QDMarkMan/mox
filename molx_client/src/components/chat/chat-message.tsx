@@ -131,9 +131,6 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
           </div>
         )}
 
-        <MessageContent content={message.content} isUser={isUser} />
-
-
         {!isUser && message.thinking && (
           <div className="mt-2 rounded-md border border-amber-200/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-400/40 dark:bg-amber-950/30 dark:text-amber-200">
             {message.thinking.status === 'analyzing'
@@ -148,6 +145,8 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
               )}
           </div>
         )}
+
+        <MessageContent content={message.content} isUser={isUser} />
 
         {/* Artifact Panel - shown prominently after content, before status logs */}
         {!isUser && (message.artifacts?.length || message.report) && (

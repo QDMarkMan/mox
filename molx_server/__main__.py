@@ -21,7 +21,12 @@ cli = typer.Typer(
 
 
 def setup_logging(verbose: bool = False, debug: bool = False) -> None:
-    """Configure logging based on verbosity level."""
+    """Configure colorful logging using rich library.
+    
+    Args:
+        verbose: Enable INFO level logging
+        debug: Enable DEBUG level logging
+    """
     if debug:
         level = logging.DEBUG
     elif verbose:
@@ -29,11 +34,70 @@ def setup_logging(verbose: bool = False, debug: bool = False) -> None:
     else:
         level = logging.WARNING
 
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s | %(levelname)-8s | %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    # Try to use rich for colorful logging
+    try:
+        from rich.logging import RichHandler
+        from rich.console import Console
+        
+        console = Console(force_terminal=True, color_system="auto")
+        
+        # Configure rich handler with colors
+        handler = RichHandler(
+            console=console,
+            show_time=True,
+            show_path=False,
+            rich_tracebacks=True,
+            tracebacks_show_locals=debug,
+            markup=True,
+        )
+        handler.setLevel(level)
+        
+        # Configure root logger
+        logging.basicConfig(
+            level=level,
+            format="%(message)s",
+            datefmt="[%Y-%m-%d %H:%M:%S]",
+            handlers=[handler],
+            force=True,
+        )
+        
+        # Also set uvicorn loggers to use the same handler
+        for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+            uvicorn_logger = logging.getLogger(logger_name)
+            uvicorn_logger.handlers = [handler]
+            
+    except ImportError:
+        # Fallback to standard logging with ANSI colors
+        class ColorFormatter(logging.Formatter):
+            """Formatter with ANSI color codes."""
+            
+            COLORS = {
+                'DEBUG': '\033[36m',     # Cyan
+                'INFO': '\033[32m',      # Green
+                'WARNING': '\033[33m',   # Yellow
+                'ERROR': '\033[31m',     # Red
+                'CRITICAL': '\033[35m',  # Magenta
+            }
+            RESET = '\033[0m'
+            
+            def format(self, record):
+                color = self.COLORS.get(record.levelname, '')
+                record.levelname = f"{color}{record.levelname:8}{self.RESET}"
+                record.name = f"\033[34m{record.name}\033[0m"  # Blue for name
+                return super().format(record)
+        
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(level)
+        handler.setFormatter(ColorFormatter(
+            fmt="%(asctime)s | %(levelname)s | %(name)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+        
+        logging.basicConfig(
+            level=level,
+            handlers=[handler],
+            force=True,
+        )
 
 
 @cli.command()
@@ -82,6 +146,10 @@ def version() -> None:
 def config() -> None:
     """Show current configuration."""
     settings = get_server_settings()
+    
+    # Get core settings for session config
+    from molx_core.config import get_core_settings
+    core_settings = get_core_settings()
 
     typer.echo("Current Configuration:")
     typer.echo("-" * 40)
@@ -93,8 +161,12 @@ def config() -> None:
     typer.echo(f"CORS Origins: {settings.cors_origins}")
     typer.echo(f"Rate Limit Enabled: {settings.rate_limit_enabled}")
     typer.echo(f"API Key Enabled: {settings.api_key_enabled}")
-    typer.echo(f"Session TTL: {settings.session_ttl_seconds}s")
-    typer.echo(f"Max Sessions: {settings.max_sessions}")
+    typer.echo("-" * 40)
+    typer.echo("Session Settings (from molx_core):")
+    typer.echo(f"  TTL: {core_settings.session_ttl}s")
+    typer.echo(f"  Cleanup Enabled: {core_settings.session_cleanup_enabled}")
+    typer.echo(f"  Cleanup Interval: {core_settings.session_cleanup_interval}s")
+    typer.echo(f"  Max Count: {core_settings.session_max_count}")
 
 
 def main() -> None:

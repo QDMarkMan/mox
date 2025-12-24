@@ -1,6 +1,7 @@
 # TODO（按优先级）
 
 ## P0
+- [ ] Thought Chain 的Thingking模式增强支持
 - [ ] 深度完成的完成Memory模块的设计，包括了回话，文件，制品，轮次，报告等所有内容的持久化存储。
 - [ ] 接入 LangChain streaming callbacks 到 `stream_agent_response`，实时推送 token、工具/计划节点状态与心跳，并支持超时/取消，避免长任务期间 UI 空窗。
 - [ ] 为工件引入 session 隔离与清理：`get_tool_output_dir` 支持 session_id 分桶，Recorder/SessionMetadata 记录相对路径，SessionManager 清理时同步删除输出，并确保 `/session/{id}/files/*` 仅暴露本 session 文件。

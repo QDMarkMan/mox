@@ -322,7 +322,12 @@ class SessionManager:
         return count + len(expired)
 
     async def start_cleanup_task(self) -> None:
-        """Start background cleanup task."""
+        """Start background cleanup task if enabled in settings."""
+        # Check if cleanup is enabled
+        if not self._settings.session_cleanup_enabled:
+            logger.info("Session cleanup disabled by configuration")
+            return
+            
         if self._cleanup_task is not None:
             return
 
@@ -335,7 +340,7 @@ class SessionManager:
                     logger.error(f"Session cleanup error: {e}")
 
         self._cleanup_task = asyncio.create_task(_cleanup_loop())
-        logger.info("Started session cleanup task")
+        logger.info(f"Started session cleanup task (interval: {self._settings.session_cleanup_interval}s)")
 
     async def stop_cleanup_task(self) -> None:
         """Stop background cleanup task."""

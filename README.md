@@ -68,7 +68,7 @@ source .venv/bin/activate  # Linux/macOS
 molx-agent --help
 ```
 
-## Run the full-stack MVP
+## Run the full-stack app
 
 The FastAPI server in `molx_server/` now exposes the chat + session APIs consumed by the Vite
 client in `molx_client/`. To exercise the complete flow:
@@ -89,27 +89,17 @@ client in `molx_client/`. To exercise the complete flow:
    SSE stream all traverse the running API server. For production builds configure
    `VITE_API_BASE_URL` to point at the deployed FastAPI instance.
 
-## Session files and artifact previews
+## Architecture & Docs
 
-The FastAPI server now exposes dedicated endpoints so that user uploads are persisted under the
-agent's `artifacts_root/uploads/<session_id>` directory (configure the `uploads_subdir` field in
-`molx_agent/config.py` if you need a different layout). Uploaded files are reflected in the agent
-state so the DataCleaner worker can immediately consume them, and every generated report or
-`output_files` entry is mirrored back into session metadata for previewing.
+- [POC Report](docs/sar_agent_poc.md): Current capabilities, demo flow, and next steps.
+- [review.md](review.md): Known issues and risks for Agent/Mem/Server/Client.
+- [todo.md](todo.md): TODOs for Agent/Mem/Server/Client.
 
-Available endpoints:
+- [Agent Design](molx_agent/README.md): Detail document for agent part
+- [Memory Design](molx_core/README.md): Detail document for memory part
+- [Server Design](molx_server/README.md): Detail document for server part
+- [Client Design](molx_client/README.md): Detail document for client part
 
-- `POST /api/v1/session/{session_id}/files` — accepts `multipart/form-data` with an
-  `uploaded_file` field and optional `description`, stores the file on disk, and registers it in the
-  session memory.
-- `GET /api/v1/session/{session_id}/files` — lists both user uploads and generated artifacts so the
-  client can present previews or download links.
-- `GET /api/v1/session/{session_id}/files/{file_id}` — streams the binary contents of a tracked
-  file with the correct MIME type for quick HTML/JSON previews.
-
-The session metadata returned by `/session/{id}/data` and `/session/{id}/files` now carries
-`uploaded_files`, `artifacts`, and per-turn artifact summaries so the UI can highlight which report
-belongs to which agent turn.
 
 ## Makefile usage
 
@@ -122,7 +112,11 @@ belongs to which agent turn.
 Install requirements:
 
 ```bash
+# install dependencies by uv
 make install
+
+# install dependencies by npm for client
+make install-client
 ```
 
 Pre-commit hooks could be installed after `git init` via
@@ -278,17 +272,6 @@ make serve-client
 
 Visit `http://localhost:5173` to connect to the local API. Update `VITE_API_BASE` to point at a remote deployment.
 
-## Architecture & Docs
-
-- [POC Report](docs/sar_agent_poc.md): Current capabilities, demo flow, and next steps.
-- [review.md](review.md): Known issues and risks for Agent/Mem/Server/Client.
-- [todo.md](todo.md): TODOs for Agent/Mem/Server/Client.
-
-- [Agent Design](molx_agent/README.md)
-- [Memory Design](molx_core/README.md)
-- [Server Design](molx_server/README.md)
-- [Client Design](molx_client/README.md)
-
 ## 🛡 License
 
 [![License](https://img.shields.io/github/license/xtalpi.com/molx-agent)](https://github.com/xtalpi.com/molx_agent/blob/main/LICENSE)
@@ -300,10 +283,9 @@ This project is licensed under the terms of the `MIT` license. See [LICENSE](htt
 ```bibtex
 @misc{molx-agent,
   author = {tongfu.e},
-  title = {Drug design agent},
+  title = {Mox Agent},
   year = {2025},
   publisher = {GitHub},
   journal = {GitHub repository},
-  howpublished = {\url{https://github.com/QDMarkman/molx-agent}}
 }
 ```

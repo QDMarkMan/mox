@@ -2,6 +2,12 @@
 
 `molx_agent/agents` 汇集了面向药物设计/SAR 分析的多智能体实现。模块基于 LangGraph 构建 ReAct 流程：先识别用户意图，再规划任务 DAG，随后派发到具备领域能力的 worker，最后对结果进行反思与优化，完成用户任务。
 
+**快速导航**
+- 流程：跳到 [LangGraph 执行模型](#langgraph-执行模型)。
+- 职责：跳到 [核心 Agent 角色](#核心-agent-角色)。
+- 开发/调试：看 [Agent tools 模块：设计模式与开发指南](#agent-tools-模块设计模式与开发指南) 与 [扩展指南](#扩展指南)。
+- 运行：参考 [使用与测试](#使用与测试)。
+
 ## 目录结构
 
 | 路径 | 说明 |
@@ -23,15 +29,19 @@
 
 ## LangGraph 执行模型
 
+阅读顺序：先看 1-3 步的正向流程，再关注 4-5 步的反馈与收敛。
+
 1. **Classify**：`IntentClassifierAgent` 读取 `state['user_query']`，调用 LLM 输出 `Intent`、置信度及推理步骤。
 2. **Plan (THINK)**：`PlannerAgent` 使用 `PLANNER_SYSTEM_PROMPT` 生成任务 DAG，仅允许 `data_cleaner`、`sar`、`reporter` 三类 worker。任务保存在 `state['tasks']`，状态初始为 `pending`。
 3. **Act**：`MolxGraphNodes.act` 根据依赖关系选取下一个 `pending` 任务，调用对应 worker (`DataCleanerAgent`/`SARAgent`/`ReporterAgent`，或自定义 worker)。运行结果写入 `state['results'][task_id]`。
 4. **Reflect / Optimize**：Planner 通过 `_derive_reflection_from_state` 或 LLM 评估产出，必要时触发 `OPTIMIZE_SYSTEM_PROMPT` 生成新计划，迭代不超过 `MAX_ITERATIONS`。
 5. **Finalize**：`MolxGraphNodes.finalize` 负责拼接总结文本，附上报告路径，并写入 `state['final_response']` 与 `state['final_answer']`。
 
-所有节点共享 `AgentState`（TypedDict），其中包含 `messages`、`tasks`、`results`、`reflection`、`intent_*` 等字段，确保 orchestrator 与 worker 间无缝传递信息。
+所有节点共享 `AgentState`（TypedDict），其中包含 `messages`、`tasks`、`results`、`reflection`、`intent_*` 等字段，确保 orchestrator 与 worker 间无缝传递信息，字段定义集中在 `modules/state.py`。
 
 ## 核心 Agent 角色
+
+快速分工一览：Intent 负责决策入口，Planner 负责 DAG，三个 worker（DataCleaner/SAR/Reporter）完成主业务，ToolAgent 适合轻量调试。
 
 ### Agent 职责与常用工具
 
@@ -105,6 +115,8 @@
 
 ## MCP 支持
 
+最小可用配置（择一）：环境变量/JSON 文件声明 server → 确认 `MCP_ENABLED` → 运行 agent。
+
 - 在 `config/mcp_servers.json` 或环境变量 `MCP_SERVERS_CONFIG` 中声明 server：
   ```json
   {
@@ -116,7 +128,8 @@
   }
   ```
 - 或者配置 HTTP 端点：`{"search": {"url": "http://localhost:8000/mcp", "transport": "http"}}`
-- 在 `.env`/环境中设置 `MCP_ENABLED=true` 以启用；若需禁用，置 `false` 或不配置 server。
+- 配置优先级：`settings.MCP_SERVERS_CONFIG`（或环境变量 `MCP_SERVERS_CONFIG`）> `config/mcp_servers.json` > `mcp_servers.json` > `~/.molx/mcp_servers.json`。
+- 默认 `MCP_ENABLED=True`，仅在存在 server 配置时会加载；置 `MCP_ENABLED=false` 或不提供配置即可禁用。
 
 ## 扩展指南
 
@@ -128,12 +141,13 @@
 
 ## 使用与测试
 
-- 安装依赖：`uv sync --extra dev` 或 `make install && make pre-commit-install`。
-- 本地运行 SAR agent：
-  ```bash
-  uv run molx-agent run --query "分析这些分子的 R1 SAR" --data ./data/example.csv
-  ```
-  或启动交互模式：`uv run molx-agent chat`（内部使用 `ChatSession`）。
-- 运行完整测试/覆盖：`make test`（会触发 `pytest` 并更新覆盖率徽章）。如只需验证 Agent 逻辑，可使用 `uv run pytest tests/agents -k sar`。
+**三步跑通**
+1) 安装依赖：`uv sync --extra dev` 或 `make install && make pre-commit-install`
+2) 运行 SAR agent：
+   ```bash
+   uv run molx-agent run --query "分析这些分子的 R1 SAR" --data ./data/example.csv
+   ```
+   交互模式：`uv run molx-agent chat`（基于 `ChatSession`）
+3) 验证：`make test`（触发 `pytest` 并更新覆盖率徽章）；只验 Agent 逻辑可用 `uv run pytest tests/agents -k sar`
 
 上述文档旨在帮助贡献者快速理解 Agent 模块的协作方式，对接新的工具链或扩展工作流时请同步更新本 README 与相关 `docs/` 条目。

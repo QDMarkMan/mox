@@ -28,8 +28,10 @@ MolX 生态的共享核心库，提供配置、会话存储与元数据工具，
 | `MOLX_DATABASE_POOL_SIZE` | `5` | Postgres 连接池大小。 |
 | `MOLX_DATABASE_MAX_OVERFLOW` | `10` | 连接池额外容量（当前仅从配置读取）。 |
 | `MOLX_DATABASE_POOL_TIMEOUT` | `30.0` | 连接池获取超时时间（秒）。 |
-| `MOLX_SESSION_TTL` | `3600` | 会话存活时长，供清理任务使用。 |
-| `MOLX_SESSION_CLEANUP_INTERVAL` | `300` | 清理任务周期（秒）。 |
+| `MOLX_SESSION_TTL` | `315360000` | 会话存活时长（秒），默认 10 年。 |
+| `MOLX_SESSION_CLEANUP_ENABLED` | `false` | 是否启用自动清理过期会话，默认关闭。 |
+| `MOLX_SESSION_CLEANUP_INTERVAL` | `86400` | 清理任务周期（秒），默认每天检查一次。 |
+| `MOLX_SESSION_MAX_COUNT` | `5000` | 最大会话数量。 |
 
 ## 选择存储后端
 
