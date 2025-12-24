@@ -1,6 +1,6 @@
 # Agents Module
 
-`molx_agent/agents` 汇集了面向药物设计/SAR 分析的多智能体实现。模块基于 LangGraph 构建 ReAct 流程：先识别用户意图，再规划任务 DAG，随后派发到具备领域能力的 worker，最后对结果进行反思与优化，生成可交付的报告。
+`molx_agent/agents` 汇集了面向药物设计/SAR 分析的多智能体实现。模块基于 LangGraph 构建 ReAct 流程：先识别用户意图，再规划任务 DAG，随后派发到具备领域能力的 worker，最后对结果进行反思与优化，完成用户任务。
 
 ## 目录结构
 

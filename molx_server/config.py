@@ -53,10 +53,11 @@ class ServerSettings(BaseSettings):
     api_key_enabled: bool = False
     api_keys: list[str] = []
 
-    # Session settings
-    session_ttl_seconds: int = 3600  # 1 hour
-    session_cleanup_interval: int = 60 * 60  # 5 minutes
-    max_sessions: int = 1000
+    # Session settings (cleanup effectively disabled for persistence)
+    # Not auto cleanup now
+    session_ttl_seconds: int = 315360000  # 10 years - keep sessions permanently
+    session_cleanup_interval: int = 86400  # Check daily (rarely deletes anything)
+    max_sessions: int = 5000  # Increased for 50 users with many sessions
 
     # Streaming settings
     stream_chunk_size: int = 1

@@ -274,7 +274,7 @@ pnpm dev
 ## Architecture & Docs
 
 - [SAR Agent POC 报告](docs/sar_agent_poc.md)：当前能力、演示流程与下一步计划。
-- [review.md](review.md)：针对 Agent/Mem/Server/Client 的缺陷列表与风险提示。
+- 
 
 ## 🛡 License
 
